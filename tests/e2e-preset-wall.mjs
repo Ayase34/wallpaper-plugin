@@ -3,11 +3,13 @@ import { launchBrowser, dismissBetaNotice } from './e2e-util.mjs'
 
 const BASE = process.argv[2] ?? 'http://127.0.0.1:3180'
 
+// 前置：清活动 + 清库中 default（防上次运行中断残留的遮蔽预设污染断言）
 await fetch(`${BASE}/ui-presets/active`, {
   method: 'PUT',
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify({ activePresetId: null }),
 }).catch(() => {})
+await fetch(`${BASE}/ui-presets/presets/default`, { method: 'DELETE' }).catch(() => {})
 
 const browser = await launchBrowser()
 const page = await browser.newPage()
@@ -63,6 +65,59 @@ check('默认 卡片标记当前应用', await deepseekCard.getByText('✓ 当�
 // 5. 还原默认
 await dialog.locator('[data-up-btn]', { hasText: '还原默认' }).first().click({ force: true })
 await page.waitForTimeout(600)
+
+// 6. #97 回归：库预设遮蔽同 id 出厂预设（default，含手设封面）→ 墙卡片 = 库版本
+//    （手设封面 + 「我的预设」徽标；原缺陷：demo 优先去重 + loadWall 跳过 → 显示自动 SVG）
+const PNG_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+const shadowPut = await fetch(`${BASE}/ui-presets/presets/default`, {
+  method: 'PUT',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    preset: {
+      schemaVersion: 1,
+      edition: 'standard',
+      id: 'default',
+      name: '默认',
+      tokens: {},
+      assets: [{ id: 'asset-cov-97', name: 'cover.png', mime: 'image/png', dataUrl: PNG_1PX }],
+      cover: { assetId: 'asset-cov-97' },
+    },
+  }),
+})
+check('#97 写入库遮蔽预设（default + 手设封面）', shadowPut.ok)
+await page.reload({ waitUntil: 'domcontentloaded' })
+await page.getByRole('button', { name: '设置', exact: true }).waitFor({ timeout: 120000 })
+  await dismissBetaNotice(page)
+await page.getByRole('button', { name: '设置', exact: true }).click()
+const dialog2 = page.getByRole('dialog', { name: '设置' })
+await dialog2.waitFor({ timeout: 30000 })
+await dialog2.getByRole('button', { name: '外观预设', exact: true }).click()
+await dialog2.locator('[data-up-section]').waitFor({ timeout: 30000 })
+await page.waitForFunction(
+  () => {
+    const imgs = [...document.querySelectorAll('[data-up-cover]')]
+    return imgs.length >= 1 && imgs.every(img => img.complete && img.naturalWidth > 0)
+  },
+  { timeout: 15000 },
+).catch(() => {})
+// 等异步封面覆盖完成（初始是 demo 自动 SVG，须等到库版本手设 PNG 上墙）
+await page.waitForFunction(
+  pngPrefix => {
+    const card = [...document.querySelectorAll('[data-up-card]')].find(c => c.textContent?.includes('默认') === true)
+    const img = card?.querySelector('[data-up-cover]')
+    return img !== null && img.getAttribute('src')?.startsWith(pngPrefix) === true
+  },
+  'data:image/png',
+  { timeout: 15000 },
+).catch(() => {})
+const shadowCard = dialog2.locator('[data-up-card]', { hasText: '默认' }).first()
+const coverSrc = await shadowCard.locator('[data-up-cover]').evaluate(img => img.getAttribute('src'))
+check('#97 库遮蔽卡片显示手设封面（非自动 SVG）', coverSrc !== null && coverSrc.startsWith('data:image/png'))
+const shadowDesc = await shadowCard.locator('[data-up-card-desc]').innerText()
+check(`#97 库遮蔽卡片徽标 = 我的预设（实际「${shadowDesc}」）`, shadowDesc.includes('我的预设'))
+// 清理：删除库遮蔽预设（恢复 demo-only，避免污染后续脚本）
+const shadowClean = await fetch(`${BASE}/ui-presets/presets/default`, { method: 'DELETE' })
+check('#97 清理库遮蔽预设', shadowClean.ok)
 
 console.log(`\n${pass} checks passed`)
 if (errors.length > 0) console.log('browser-errors: ' + JSON.stringify(errors.slice(0, 5)))

@@ -1302,7 +1302,10 @@ var PresetsController = class {
       if (res.ok) {
         const body = await res.json();
         for (const meta of body.presets ?? []) {
-          if (!out.some((p) => p.id === meta.id)) out.push({ ...meta, builtin: false, hasBackup: meta.hasBackup === true });
+          const entry = { ...meta, builtin: false, hasBackup: meta.hasBackup === true };
+          const idx = out.findIndex((p) => p.id === meta.id);
+          if (idx === -1) out.push(entry);
+          else out[idx] = entry;
         }
       }
     } catch {
@@ -5408,7 +5411,7 @@ function SectionPage() {
     for (const demo of DEMO_PRESETS) demoCovers[demo.id] = coverDataUrlFor(demo);
     setCovers(demoCovers);
     for (const item of items) {
-      if (demoCovers[item.id] !== void 0) continue;
+      if (item.builtin && demoCovers[item.id] !== void 0) continue;
       void controller2?.loadPreset(item.id).then((preset2) => {
         if (preset2 === null) return;
         void coverImageFor(preset2).then((src) => {

@@ -312,7 +312,13 @@ export class PresetsController {
       if (res.ok) {
         const body = (await res.json()) as { presets?: Array<{ id: string; name: string; edition: string; hasBackup?: unknown }> }
         for (const meta of body.presets ?? []) {
-          if (!out.some(p => p.id === meta.id)) out.push({ ...meta, builtin: false, hasBackup: meta.hasBackup === true })
+          // #97：库预设遮蔽同 id 内置示例（与 loadPreset 查序一致）——列表项必须 = 生效预设：
+          // 保位替换 demo 条目（墙/左栏显示库版本——手设封面、可编辑/删除、hasBackup 正确；
+          // 原"demo 优先去重"导致墙卡片显示 demo 封面/出厂徽标，与实际生效内容不一致）
+          const entry = { ...meta, builtin: false, hasBackup: meta.hasBackup === true }
+          const idx = out.findIndex(p => p.id === meta.id)
+          if (idx === -1) out.push(entry)
+          else out[idx] = entry
         }
       }
     } catch { /* 库不可用：仅 demo */ }

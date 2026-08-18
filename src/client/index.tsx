@@ -210,7 +210,10 @@ function SectionPage(): React.ReactElement {
     for (const demo of DEMO_PRESETS) demoCovers[demo.id] = coverDataUrlFor(demo)
     setCovers(demoCovers)
     for (const item of items) {
-      if (demoCovers[item.id] !== undefined) continue
+      // #97：仅「未被库遮蔽的 demo」用内置封面；库遮蔽项（同 id，builtin=false）必须加载
+      // 生效预设封面（手设优先）——原逻辑 demoCovers 命中即跳过，库预设 default 的
+      // 手设封面永不加载，墙卡片一直显示自动生成的 SVG
+      if (item.builtin && demoCovers[item.id] !== undefined) continue
       void controller?.loadPreset(item.id).then(preset => {
         if (preset === null) return
         // #56：手设封面（含裁剪渲染）优先，否则自动生成 SVG

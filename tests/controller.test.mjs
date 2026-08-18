@@ -273,6 +273,35 @@ test('listPresets：透传 hasBackup（内置恒 false，库条目按列表值�
   } finally { restore() }
 })
 
+test('#97 listPresets：库预设遮蔽同 id 内置示例（保位替换——生效预设上墙）', async () => {
+  const theme = createFakeTheme()
+  const { controller, restore } = makeController(theme, {
+    '/ui-presets/presets': async () => ({
+      status: 200,
+      body: {
+        presets: [
+          // 库中 default = 用户改过的出厂预设（含手设封面/壁纸）——遮蔽 demo default
+          { id: 'default', name: '默认（库版）', edition: 'standard', hasBackup: true },
+          { id: 'lib-x', name: 'X', edition: 'standard' },
+        ],
+      },
+    }),
+    '*': async () => ({ status: 200, body: {} }),
+  })
+  try {
+    const list = await controller.listPresets()
+    const entry = list.find(p => p.id === 'default')
+    assert.ok(entry !== undefined, '同 id 只保留一个条目')
+    assert.equal(entry?.builtin, false, '遮蔽后是库条目（非内置）')
+    assert.equal(entry?.name, '默认（库版）', '名称来自库版本')
+    assert.equal(entry?.hasBackup, true, 'hasBackup 来自库版本')
+    const demoCount = list.filter(p => p.id === 'default' && p.builtin).length
+    assert.equal(demoCount, 0, 'demo 条目必须被替换而非并存')
+    assert.equal(list[0]?.id, 'default', '保位替换：遮蔽条目仍在 demo 原位置（墙首卡）')
+    assert.equal(list.find(p => p.id === 'lib-x')?.builtin, false)
+  } finally { restore() }
+})
+
 // ---- #63 P0-1：活动预设内容更新即时生效（桥 id 相同重应用 + 防自激） ----
 
 test('applyPresetById 已活动预设重应用：引擎重挂但不再写 active（防 revision 自激）', async () => {
