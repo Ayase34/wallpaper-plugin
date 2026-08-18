@@ -207,6 +207,13 @@ export function restoreBackupFile(env: ToolsEnv, id: string): { name: string } {
   return { name: backup.name }
 }
 
+/** #102：字节数人性化（asset_list/preset_get render 用）。 */
+function formatBytes(n: number): string {
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)}MB`
+  if (n >= 1024) return `${(n / 1024).toFixed(1)}KB`
+  return `${n}B`
+}
+
 /** review P3（全量评审）：id 生成防同毫秒碰撞——时间戳 base36 + 4 位随机后缀。
  * （原 Date.now().toString(36) 同毫秒连发会静默覆盖；UI 人工操作几乎不触发，
  * 但自动化/AI 流程可触发。） */
@@ -409,7 +416,11 @@ export function createPresetToolDefs(
         },
         render: (_args, value) => [{
           type: 'text',
-          text: `共 ${value.presets.length} 个预设：${value.presets.map((p: { name: string }) => p.name).join('、')}`,
+          // #102：render 必须携带 id——LLM 看到的是 render 文本（结构化输出不直达模型），
+          // 原实现只拼名称，AI 无法按 id 继续 preset_get/apply
+          text: `共 ${value.presets.length} 个预设：${value.presets
+            .map((p: { id: string; name: string; builtin: boolean }) => `${p.id}（${p.name}${p.builtin ? '，内置' : ''}）`)
+            .join('、')}`,
         }],
       },
       execute: () => {
@@ -667,12 +678,47 @@ export function createPresetToolDefs(
             preset: { type: 'object', additionalProperties: true, required: true },
           },
         },
-        render: (_args, value) => [{
-          type: 'text',
-          text: value.ok === true && value.preset !== undefined
-            ? `预设「${value.preset.name}」详情已返回（${value.preset.tokenCount} 令牌${value.preset.hasBackup ? '，有备份' : ''}）`
-            : '读取失败',
-        }],
+        render: (_args, value) => {
+          // #102：render 必须给出完整详情（令牌双值/widgets/主题/封面/素材）——LLM 看到的是
+          // render 文本（结构化输出不直达模型），原实现只显示「N 令牌，有备份」，无法"先读现值再微调"
+          if (value.ok !== true || value.preset === undefined) return [{ type: 'text', text: '读取失败' }]
+          const p = value.preset as {
+            name: string; id: string; edition: string; builtin: boolean; hasBackup: boolean; tokenCount: number
+            tokens: Record<string, { light: string; dark: string }>
+            css?: Array<{ selector: string }>
+            theme?: { id: string; colorScheme: string; tokens: Record<string, { light: string; dark: string }> } | null
+            assets?: Array<{ id: string; name: string; mime: string; size: number }>
+            widgets?: Array<{ id: string; params: Record<string, string> }>
+            cover?: { assetId: string; cropX?: string; cropY?: string; cropW?: string; cropH?: string } | null
+          }
+          const tokenNames = Object.keys(p.tokens ?? {})
+          const tokenLines = tokenNames.slice(0, 30).map(name => {
+            const v = p.tokens[name]
+            return `- ${name}: light=${v?.light} dark=${v?.dark}`
+          })
+          const moreTokens = tokenNames.length > 30 ? `（…共 ${tokenNames.length} 个令牌）` : ''
+          const widgetLines = (p.widgets ?? []).map(w =>
+            `- ${w.id}: ${Object.entries(w.params ?? {}).map(([k, v]) => `${k}=${v}`).join(' ')}`)
+          const themeLine = p.theme !== null && p.theme !== undefined
+            ? `主题 ${p.theme.id}（${p.theme.colorScheme}，${Object.keys(p.theme.tokens ?? {}).length} 令牌）`
+            : '主题无'
+          const cover = p.cover
+          const coverLine = cover !== null && cover !== undefined
+            ? `封面 ${cover.assetId}${cover.cropW !== undefined && cover.cropW !== '' ? `（裁剪 ${cover.cropX},${cover.cropY} ${cover.cropW}×${cover.cropH}）` : ''}`
+            : '封面无'
+          const assetLines = (p.assets ?? []).map(a => `- ${a.id}：${a.name}（${a.mime}，${formatBytes(a.size)}）`)
+          return [{
+            type: 'text',
+            text: [
+              `预设「${p.name}」（id=${p.id}，${p.edition}${p.builtin ? '，内置' : ''}${p.hasBackup ? '，有备份' : ''}）：`
+                + `${p.tokenCount} 令牌；widgets ${(p.widgets ?? []).length} 个；${themeLine}；${coverLine}；`
+                + `CSS 补丁 ${(p.css ?? []).length} 段；素材 ${(p.assets ?? []).length} 个`,
+              tokenLines.length > 0 ? `令牌：\n${tokenLines.join('\n')}${moreTokens}` : '',
+              widgetLines.length > 0 ? `widgets：\n${widgetLines.join('\n')}` : '',
+              assetLines.length > 0 ? `素材：\n${assetLines.join('\n')}` : '',
+            ].filter(Boolean).join('\n'),
+          }]
+        },
       },
       execute: (args: { id: string }) => {
         const detail = getPresetDetail(env, args.id)
@@ -842,7 +888,13 @@ export function createPresetToolDefs(
         },
         render: (_args, value) => [{
           type: 'text',
-          text: `壁纸库共 ${value.assets.length} 个素材：${value.assets.map((a: { name: string }) => a.name).join('、')}`,
+          // #102：render 必须携带素材 id——LLM 看到的是 render 文本，原实现只拼中文文件名，
+          // AI 拿不到合法标识符（实测只能翻磁盘目录找 id）
+          text: value.assets.length === 0
+            ? '壁纸库为空（素材上传由用户在界面完成）'
+            : `壁纸库共 ${value.assets.length} 个素材（widgets 引用请用 id）：\n${value.assets
+              .map((a: { id: string; name: string; mime: string; size: number }) => `- ${a.id}：${a.name}（${a.mime}，${formatBytes(a.size)}）`)
+              .join('\n')}`,
         }],
       },
       execute: () => Promise.resolve({ assets: listWallpaperAssets(env) }),

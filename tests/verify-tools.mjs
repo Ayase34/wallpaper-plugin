@@ -110,6 +110,25 @@ const assetList = await T('asset_list').execute({}, {})
 check('asset_list 返回数组且条目结构完整（id/name/mime/size）',
   Array.isArray(assetList.assets) && assetList.assets.every(a => typeof a.id === 'string' && typeof a.name === 'string' && typeof a.mime === 'string' && typeof a.size === 'number'))
 assertLossless('asset_list', assetList)
+// #102：render 是 LLM 实际看到的内容（结构化输出不直达模型）——必须携带 id/令牌双值等关键字段
+const listRender = T('preset_list').output.render({}, listResult).map(c => c.text).join('\n')
+check('preset_list render 含预设 id（default（默认））', listRender.includes('default（'))
+const assetRender = T('asset_list').output.render({}, {
+  assets: [{ id: 'asset-render-1', name: '图.png', mime: 'image/png', size: 2621440 }],
+}).map(c => c.text).join('\n')
+check('asset_list render 含素材 id 与体积', assetRender.includes('asset-render-1') && assetRender.includes('2.5MB'))
+const getRender = T('preset_get').output.render({}, {
+  ok: true,
+  preset: {
+    name: '渲染测试', id: 'preset-render', edition: 'standard', builtin: false, hasBackup: true, tokenCount: 2,
+    tokens: { '--dsw-alias-bg-base': { light: '#fff', dark: '#000' } },
+    css: [], theme: { id: 'preset-render-theme', colorScheme: 'light', tokens: {} },
+    assets: [], widgets: [{ id: 'chat-background', params: { assetId: 'asset-render-1', opacity: '0.5' } }],
+    cover: null,
+  },
+}).map(c => c.text).join('\n')
+check('preset_get render 含令牌双值与 widgets 参数',
+  getRender.includes('--dsw-alias-bg-base') && getRender.includes('light=#fff') && getRender.includes('assetId=asset-render-1'))
 
 // ============ 可靠性 ============
 

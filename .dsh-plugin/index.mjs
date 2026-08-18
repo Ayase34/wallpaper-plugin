@@ -2373,6 +2373,11 @@ function restoreBackupFile(env, id) {
   if (current !== null) writeFileAtomic(join(dir, "backup.json"), JSON.stringify(current, null, 2));
   return { name: backup.name };
 }
+function formatBytes(n) {
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)}MB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(1)}KB`;
+  return `${n}B`;
+}
 function genId(prefix) {
   const rand = Math.floor(Math.random() * 36 ** 4).toString(36).padStart(4, "0");
   return `${prefix}-${Date.now().toString(36)}${rand}`;
@@ -2529,7 +2534,9 @@ function createPresetToolDefs(env, defineTool) {
         },
         render: (_args, value) => [{
           type: "text",
-          text: `\u5171 ${value.presets.length} \u4E2A\u9884\u8BBE\uFF1A${value.presets.map((p) => p.name).join("\u3001")}`
+          // #102：render 必须携带 id——LLM 看到的是 render 文本（结构化输出不直达模型），
+          // 原实现只拼名称，AI 无法按 id 继续 preset_get/apply
+          text: `\u5171 ${value.presets.length} \u4E2A\u9884\u8BBE\uFF1A${value.presets.map((p) => `${p.id}\uFF08${p.name}${p.builtin ? "\uFF0C\u5185\u7F6E" : ""}\uFF09`).join("\u3001")}`
         }]
       },
       execute: () => {
@@ -2773,10 +2780,33 @@ function createPresetToolDefs(env, defineTool) {
             preset: { type: "object", additionalProperties: true, required: true }
           }
         },
-        render: (_args, value) => [{
-          type: "text",
-          text: value.ok === true && value.preset !== void 0 ? `\u9884\u8BBE\u300C${value.preset.name}\u300D\u8BE6\u60C5\u5DF2\u8FD4\u56DE\uFF08${value.preset.tokenCount} \u4EE4\u724C${value.preset.hasBackup ? "\uFF0C\u6709\u5907\u4EFD" : ""}\uFF09` : "\u8BFB\u53D6\u5931\u8D25"
-        }]
+        render: (_args, value) => {
+          if (value.ok !== true || value.preset === void 0) return [{ type: "text", text: "\u8BFB\u53D6\u5931\u8D25" }];
+          const p = value.preset;
+          const tokenNames = Object.keys(p.tokens ?? {});
+          const tokenLines = tokenNames.slice(0, 30).map((name2) => {
+            const v = p.tokens[name2];
+            return `- ${name2}: light=${v?.light} dark=${v?.dark}`;
+          });
+          const moreTokens = tokenNames.length > 30 ? `\uFF08\u2026\u5171 ${tokenNames.length} \u4E2A\u4EE4\u724C\uFF09` : "";
+          const widgetLines = (p.widgets ?? []).map((w) => `- ${w.id}: ${Object.entries(w.params ?? {}).map(([k, v]) => `${k}=${v}`).join(" ")}`);
+          const themeLine = p.theme !== null && p.theme !== void 0 ? `\u4E3B\u9898 ${p.theme.id}\uFF08${p.theme.colorScheme}\uFF0C${Object.keys(p.theme.tokens ?? {}).length} \u4EE4\u724C\uFF09` : "\u4E3B\u9898\u65E0";
+          const cover = p.cover;
+          const coverLine = cover !== null && cover !== void 0 ? `\u5C01\u9762 ${cover.assetId}${cover.cropW !== void 0 && cover.cropW !== "" ? `\uFF08\u88C1\u526A ${cover.cropX},${cover.cropY} ${cover.cropW}\xD7${cover.cropH}\uFF09` : ""}` : "\u5C01\u9762\u65E0";
+          const assetLines = (p.assets ?? []).map((a) => `- ${a.id}\uFF1A${a.name}\uFF08${a.mime}\uFF0C${formatBytes(a.size)}\uFF09`);
+          return [{
+            type: "text",
+            text: [
+              `\u9884\u8BBE\u300C${p.name}\u300D\uFF08id=${p.id}\uFF0C${p.edition}${p.builtin ? "\uFF0C\u5185\u7F6E" : ""}${p.hasBackup ? "\uFF0C\u6709\u5907\u4EFD" : ""}\uFF09\uFF1A${p.tokenCount} \u4EE4\u724C\uFF1Bwidgets ${(p.widgets ?? []).length} \u4E2A\uFF1B${themeLine}\uFF1B${coverLine}\uFF1BCSS \u8865\u4E01 ${(p.css ?? []).length} \u6BB5\uFF1B\u7D20\u6750 ${(p.assets ?? []).length} \u4E2A`,
+              tokenLines.length > 0 ? `\u4EE4\u724C\uFF1A
+${tokenLines.join("\n")}${moreTokens}` : "",
+              widgetLines.length > 0 ? `widgets\uFF1A
+${widgetLines.join("\n")}` : "",
+              assetLines.length > 0 ? `\u7D20\u6750\uFF1A
+${assetLines.join("\n")}` : ""
+            ].filter(Boolean).join("\n")
+          }];
+        }
       },
       execute: (args) => {
         const detail = getPresetDetail(env, args.id);
@@ -2940,7 +2970,10 @@ function createPresetToolDefs(env, defineTool) {
         },
         render: (_args, value) => [{
           type: "text",
-          text: `\u58C1\u7EB8\u5E93\u5171 ${value.assets.length} \u4E2A\u7D20\u6750\uFF1A${value.assets.map((a) => a.name).join("\u3001")}`
+          // #102：render 必须携带素材 id——LLM 看到的是 render 文本，原实现只拼中文文件名，
+          // AI 拿不到合法标识符（实测只能翻磁盘目录找 id）
+          text: value.assets.length === 0 ? "\u58C1\u7EB8\u5E93\u4E3A\u7A7A\uFF08\u7D20\u6750\u4E0A\u4F20\u7531\u7528\u6237\u5728\u754C\u9762\u5B8C\u6210\uFF09" : `\u58C1\u7EB8\u5E93\u5171 ${value.assets.length} \u4E2A\u7D20\u6750\uFF08widgets \u5F15\u7528\u8BF7\u7528 id\uFF09\uFF1A
+${value.assets.map((a) => `- ${a.id}\uFF1A${a.name}\uFF08${a.mime}\uFF0C${formatBytes(a.size)}\uFF09`).join("\n")}`
         }]
       },
       execute: () => Promise.resolve({ assets: listWallpaperAssets(env) }),
