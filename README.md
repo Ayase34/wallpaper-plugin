@@ -1,31 +1,24 @@
 # wallpaper-plugin — DSH 壁纸插件
 
-DSH（DeepSeek Harness）第三方插件：主题预设管理与壁纸系统。设置页「外观预设」入口 + 全屏美化工作室——壁纸素材库（聊天背景 / 设置卡 / 侧栏海报）与图层合成壁纸（多图拼接、多 GIF 动图合成、分层输出）。
+中文 | English: [README.en.md](README.en.md)
 
-- 版本：**1.0.0**（#95 正式版，前身 ui-presets）
-- 出厂预设：「默认」（海蓝海洋风，15 令牌 preset_check 全净）
-- 许可证：MIT ｜ English: [README.en.md](README.en.md)
+DSH（DeepSeek Harness）第三方插件：主题预设管理与壁纸系统。安装之后设置页会多一个「外观预设」的选项。
 
 ## 功能
 
 - **预设墙**：卡片一键切换 + 封面 + diff 告警；工作室深度编辑（原始令牌 / CSS 补丁 / 主题注册 / 素材部件）
 - **壁纸素材库**：上传图片（≤20MB/个，库上限 100 个）→ 分配给三部件（16:9 聊天背景 / 1:1 设置卡 / 1:5 侧栏海报），按固定比例裁剪、明暗分别配置、不透明度
-- **图层合成壁纸**：多张小图拼贴合成（拖放 / 缩放 / 旋转 / 透明度 / 层级 / 撤销栈）；多 GIF 时间轴合成输出真动图；单个动图场景自动**分层输出**（静态底 + 原生动图，照片不烤进 GIF，体积小）
+- **图层合成壁纸**：多张小图拼贴合成；多 GIF 时间轴合成输出真动图；单个动图场景自动**分层输出**
 - **AI 协同**：12 个 `preset_*` / `asset_*` 工具（对话式换肤：创建 / 应用 / 微调 / 自纠）
 - **分享**：zip 三件套导出（预设 + 封面 + **全部素材内嵌**），导入完整还原（含分层规格）
 
 ## 安装
 
-### 环境要求
-
-- DSH 桌面端或 Web 端 profile（须含 `@deepseek-ai/dsh-web-app`；headless profile 无 UI 面）
-- Node.js ≥ 20.11（构建需要）
-
 ### 安装步骤
 
 ```sh
 # 装入 profile
-dsh plugin --profile <name> add <本目录>
+dsh plugin --profile <name> add github:Ayase34/wallpaper-plugin
 ```
 
 
@@ -40,7 +33,6 @@ dsh plugin --profile <name> add <本目录>
     assetsDir: C:/你的壁纸库目录     # 可选；默认 <presetsDir>/assets
 ```
 
-⚠️ 配置类型错误（如数字）→ 插件 FAILED → 应用无法启动。
 
 ## 快速开始
 
