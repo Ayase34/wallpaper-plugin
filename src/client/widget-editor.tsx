@@ -59,7 +59,14 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
     }
     const result = await controller?.uploadAsset(file)
     if (result?.ok === true && result.id !== undefined) {
-      props.onAssetsChange([...assetsRef.current, { id: result.id, name: result.name ?? file.name, mime: result.mime ?? file.type }])
+      // #106：去重命中（deduped）时用用户自己的文件名——预设级 assets 声明名字独立，
+      // 库中 meta 名字保持先入库者（asset_list 显示）；普通上传用服务端规范化名
+      const entryName = result.deduped === true ? file.name : (result.name ?? file.name)
+      props.onAssetsChange([...assetsRef.current, { id: result.id, name: entryName, mime: result.mime ?? file.type }])
+      // #106：内容级去重——同一张图重复上传时服务端复用已有素材（不存第二份）
+      if (result.deduped === true) {
+        window.alert('该图片素材已存在，已自动复用现有素材（未新增重复文件）')
+      }
     } else {
       window.alert(result?.error ?? '上传失败')
     }

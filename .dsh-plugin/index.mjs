@@ -1,4 +1,5 @@
 // src/node/index.ts
+import { createHash } from "node:crypto";
 import { existsSync as existsSync2, mkdirSync as mkdirSync2, readFileSync as readFileSync2, readdirSync as readdirSync2, rmSync as rmSync2, writeFileSync as writeFileSync2 } from "node:fs";
 import { homedir } from "node:os";
 import { join as join2 } from "node:path";
@@ -3570,9 +3571,22 @@ function apply(ctx, config = {}) {
               }
             }
             const id = genId("asset");
+            const hash = sha256Of(bytes);
+            const dup = findDupAsset(hash);
+            if (dup !== null) {
+              if (layers !== void 0) mergeLayersIntoMeta(dup.id, layers);
+              return json(res, 200, {
+                ok: true,
+                id: dup.id,
+                name: dup.name,
+                mime: dup.mime,
+                size: dup.size,
+                deduped: true
+              }, { "cache-control": "no-store" });
+            }
             try {
               mkdirSync2(ASSETS_DIR, { recursive: true });
-              writeAssetFile(id, name2, mime, bytes, layers);
+              writeAssetFile(id, name2, mime, bytes, layers, hash);
             } catch (error) {
               return json(res, 500, { error: `\u5199\u5165\u5931\u8D25\uFF1A${safeErrorMessage(error)}` });
             }
@@ -3673,9 +3687,30 @@ function assetFilePath(id) {
 function assetMetaFile(id) {
   return join2(ASSETS_DIR, `${id}.json`);
 }
-function writeAssetFile(id, name2, mime, bytes, layers) {
+function writeAssetFile(id, name2, mime, bytes, layers, sha256) {
   writeFileSync2(assetFilePath(id), bytes);
-  writeFileAtomic(assetMetaFile(id), JSON.stringify(layers === void 0 ? { id, name: name2, mime, size: bytes.length } : { id, name: name2, mime, size: bytes.length, layers }));
+  const meta = { id, name: name2, mime, size: bytes.length };
+  if (layers !== void 0) meta.layers = layers;
+  if (sha256 !== void 0) meta.sha256 = sha256;
+  writeFileAtomic(assetMetaFile(id), JSON.stringify(meta));
+}
+function sha256Of(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+function mergeLayersIntoMeta(id, layers) {
+  try {
+    const meta = readAssetMeta(id);
+    if (meta === null) return;
+    if (meta.layers !== void 0 && JSON.stringify(meta.layers) === JSON.stringify(layers)) return;
+    writeFileAtomic(assetMetaFile(id), JSON.stringify({ ...meta, layers }));
+  } catch {
+  }
+}
+function findDupAsset(hash) {
+  for (const meta of listAssetMetas()) {
+    if (meta.sha256 === hash) return meta;
+  }
+  return null;
 }
 function readAssetMeta(id) {
   try {
@@ -3743,6 +3778,7 @@ function storeEmbeddedAssets(preset2) {
   if (preset2.assets === void 0) return preset2;
   const existing = new Set(listAssetMetas().map((meta) => meta.id));
   const used = /* @__PURE__ */ new Set();
+  const rewritten = /* @__PURE__ */ new Map();
   const assets = preset2.assets.map((asset) => {
     if (asset.dataUrl === void 0) return asset;
     const comma = asset.dataUrl.indexOf(",");
@@ -3751,10 +3787,16 @@ function storeEmbeddedAssets(preset2) {
       const bytes = Uint8Array.from(Buffer.from(asset.dataUrl.slice(comma + 1), "base64"));
       if (bytes.length > MAX_ASSET_FILE_SIZE) return { id: asset.id, name: asset.name, mime: asset.mime };
       if (!existing.has(asset.id) && !used.has(asset.id)) {
+        const dup = findDupAsset(sha256Of(bytes));
+        if (dup !== null) {
+          if (asset.layers !== void 0) mergeLayersIntoMeta(dup.id, asset.layers);
+          rewritten.set(asset.id, dup.id);
+          return { id: dup.id, name: asset.name, mime: asset.mime };
+        }
         if (listAssetMetas().length >= MAX_ASSETS) return { id: asset.id, name: asset.name, mime: asset.mime };
         used.add(asset.id);
         mkdirSync2(ASSETS_DIR, { recursive: true });
-        writeAssetFile(asset.id, asset.name, asset.mime, bytes, asset.layers);
+        writeAssetFile(asset.id, asset.name, asset.mime, bytes, asset.layers, sha256Of(bytes));
         existing.add(asset.id);
       }
       return { id: asset.id, name: asset.name, mime: asset.mime };
@@ -3762,7 +3804,17 @@ function storeEmbeddedAssets(preset2) {
     }
     return { id: asset.id, name: asset.name, mime: asset.mime };
   });
-  return { ...preset2, assets };
+  if (rewritten.size === 0) return { ...preset2, assets };
+  const rewriteId = (value) => rewritten.get(value) ?? value;
+  const widgets = (preset2.widgets ?? []).map((widget) => {
+    const params = { ...widget.params ?? {} };
+    for (const [key, value] of Object.entries(params)) {
+      if (typeof value === "string" && rewritten.has(value)) params[key] = rewriteId(value);
+    }
+    return { ...widget, params };
+  });
+  const cover = preset2.cover !== void 0 && rewritten.has(preset2.cover.assetId) ? { ...preset2.cover, assetId: rewriteId(preset2.cover.assetId) } : preset2.cover;
+  return { ...preset2, assets, widgets, ...cover !== void 0 ? { cover } : {} };
 }
 function findAssetRefPresets(assetId) {
   const out = [];

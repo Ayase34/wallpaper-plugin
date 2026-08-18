@@ -173,6 +173,49 @@ if (sharedId !== undefined) {
   await fetch(`${BASE}/ui-presets/presets/asset-share-b`, { method: 'DELETE' }).catch(() => {})
 }
 
+// 6. #106 内容级去重（用户拍板：重复导入相同图片不存第二份）：
+//    同字节二次上传 → 复用 id；zip 导入同内容不同 id → 引用改写为已有 id、不新增库条目
+const dupBytes = Buffer.from(PNG_BASE64, 'base64')
+const up1 = await fetch(`${BASE}/ui-presets/assets?name=dup-a.png&mime=image/png`, {
+  method: 'PUT', headers: { 'content-type': 'image/png' }, body: dupBytes,
+})
+const up2 = await fetch(`${BASE}/ui-presets/assets?name=dup-b.png&mime=image/png`, {
+  method: 'PUT', headers: { 'content-type': 'image/png' }, body: dupBytes,
+})
+const dup1 = await up1.json()
+const dup2 = await up2.json()
+check(`#106 同内容二次上传复用 id（${dup1.id} == ${dup2.id}，deduped=${dup2.deduped}）`,
+  up1.ok && up2.ok && dup1.id === dup2.id && dup2.deduped === true)
+const libAfterDup = await (await fetch(`${BASE}/ui-presets/assets`)).json()
+check('#106 库中该内容仅一个条目', (libAfterDup.assets ?? []).filter(a => a.id === dup1.id).length === 1)
+// zip 导入同内容（不同 id）→ 引用改写为已有 id（不新增库条目）
+const { zipStore } = await import('../src/node/zip-util.ts')
+const dupZip = zipStore([
+  { name: 'preset.json', data: new TextEncoder().encode(JSON.stringify({
+    schemaVersion: 1, id: 'dup-zip-preset', name: '去重导入', edition: 'standard',
+    targetDshVersion: '0.1.0-rc.5',
+    tokens: { '--dsw-alias-bg-base': { light: '#fff', dark: '#000' } },
+    assets: [{ id: 'asset-dupzip-1', name: 'dup-b.png', mime: 'image/png', dataUrl: `data:image/png;base64,${PNG_BASE64}` }],
+    widgets: [{ id: 'chat-background', params: { assetId: 'asset-dupzip-1', opacity: '1' } }],
+  })) },
+  { name: 'cover.svg', data: new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>') },
+  { name: 'manifest.json', data: new TextEncoder().encode(JSON.stringify({ id: 'dup-zip-preset', name: '去重导入' })) },
+])
+const dupZipRes = await fetch(`${BASE}/ui-presets/import-zip`, {
+  method: 'POST', headers: { 'content-type': 'application/zip' }, body: Buffer.from(dupZip),
+})
+const dupZipBody = await dupZipRes.json()
+check('#106 zip 导入成功', dupZipRes.ok && dupZipBody.id === 'dup-zip-preset')
+const dupPreset = (await (await fetch(`${BASE}/ui-presets/presets/dup-zip-preset`)).json()).preset
+check('#106 zip 导入素材引用改写为已有 id',
+  (dupPreset.assets ?? []).some(a => a.id === dup1.id)
+  && (dupPreset.widgets ?? []).some(w => w.params?.assetId === dup1.id))
+const libAfterZip = await (await fetch(`${BASE}/ui-presets/assets`)).json()
+check('#106 zip 导入未新增库条目', (libAfterZip.assets ?? []).filter(a => a.id === dup1.id).length === 1)
+// 清理
+await fetch(`${BASE}/ui-presets/presets/dup-zip-preset`, { method: 'DELETE' }).catch(() => {})
+await fetch(`${BASE}/ui-presets/assets/${encodeURIComponent(dup1.id)}`, { method: 'DELETE' }).catch(() => {})
+
 console.log(`\n${pass} checks passed`)
 if (errors.length > 0) console.log('browser-errors: ' + JSON.stringify(errors.slice(0, 5)))
 await browser.close()

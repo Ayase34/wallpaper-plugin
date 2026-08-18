@@ -1569,7 +1569,9 @@ var PresetsController = class {
           ok: true,
           id: body.id,
           name: typeof body.name === "string" ? body.name : fileName,
-          mime: typeof body.mime === "string" ? body.mime : file.type
+          mime: typeof body.mime === "string" ? body.mime : file.type,
+          // #106：内容级去重——服务端命中同 sha256 素材 → 复用已有 id（UI 提示"已复用"）
+          deduped: body.deduped === true
         };
       }
       const message = typeof body.error === "string" ? body.error : "\u4E0A\u4F20\u5931\u8D25";
@@ -3820,7 +3822,11 @@ function WidgetEditor(props) {
     }
     const result = await controller2?.uploadAsset(file);
     if (result?.ok === true && result.id !== void 0) {
-      props.onAssetsChange([...assetsRef.current, { id: result.id, name: result.name ?? file.name, mime: result.mime ?? file.type }]);
+      const entryName = result.deduped === true ? file.name : result.name ?? file.name;
+      props.onAssetsChange([...assetsRef.current, { id: result.id, name: entryName, mime: result.mime ?? file.type }]);
+      if (result.deduped === true) {
+        window.alert("\u8BE5\u56FE\u7247\u7D20\u6750\u5DF2\u5B58\u5728\uFF0C\u5DF2\u81EA\u52A8\u590D\u7528\u73B0\u6709\u7D20\u6750\uFF08\u672A\u65B0\u589E\u91CD\u590D\u6587\u4EF6\uFF09");
+      }
     } else {
       window.alert(result?.error ?? "\u4E0A\u4F20\u5931\u8D25");
     }

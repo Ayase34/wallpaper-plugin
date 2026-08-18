@@ -580,7 +580,7 @@ export class PresetsController {
     file: File | Blob,
     name?: string,
     layers?: { animAssetId: string; x: number; y: number; w: number; h: number },
-  ): Promise<{ ok: boolean; id?: string; name?: string; mime?: string; error?: string }> {
+  ): Promise<{ ok: boolean; id?: string; name?: string; mime?: string; deduped?: boolean; error?: string }> {
     if (!file.type.startsWith('image/')) return { ok: false, error: '只支持图片素材（image/*）' }
     if (file.size > MAX_ASSET_FILE_SIZE) return { ok: false, error: '素材超过上限（≤20MB）' }
     const fileName = (typeof (file as File).name === 'string' && (file as File).name !== '')
@@ -594,7 +594,7 @@ export class PresetsController {
         headers: { 'content-type': file.type },
         body: file,
       })
-      const body = (await res.json()) as { ok?: unknown; id?: unknown; name?: unknown; mime?: unknown; error?: unknown }
+      const body = (await res.json()) as { ok?: unknown; id?: unknown; name?: unknown; mime?: unknown; deduped?: unknown; error?: unknown }
       if (res.ok && body.ok === true && typeof body.id === 'string') {
         if (layers !== undefined) this.layersMeta.set(body.id, layers)
         return {
@@ -602,6 +602,8 @@ export class PresetsController {
           id: body.id,
           name: typeof body.name === 'string' ? body.name : fileName,
           mime: typeof body.mime === 'string' ? body.mime : file.type,
+          // #106：内容级去重——服务端命中同 sha256 素材 → 复用已有 id（UI 提示"已复用"）
+          deduped: body.deduped === true,
         }
       }
       const message = typeof body.error === 'string' ? body.error : '上传失败'

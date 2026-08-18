@@ -6,6 +6,9 @@ import { launchBrowser, dismissBetaNotice } from './e2e-util.mjs'
 const BASE = process.argv[2] ?? 'http://127.0.0.1:3180'
 // 1×1 透明 PNG
 const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+// #106：深色变体用不同字节的图——内容去重后同内容上传只会得到同一个 id，
+// 测试要断言明暗 URL 切换，必须让两个素材内容不同（去重语义下相同图片复用同一素材是正确行为）
+const PNG_BASE64_DARK = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 
 await fetch(`${BASE}/ui-presets/active`, {
   method: 'PUT',
@@ -15,6 +18,12 @@ await fetch(`${BASE}/ui-presets/active`, {
 const existingList = await (await fetch(`${BASE}/ui-presets/presets`)).json()
 for (const item of existingList.presets ?? []) {
   await fetch(`${BASE}/ui-presets/presets/${encodeURIComponent(item.id)}`, { method: 'DELETE' }).catch(() => {})
+}
+// #106：清空素材库——内容去重后跨脚本残留的同内容素材会让本脚本的上传去重到旧条目（旧名字/旧 id），
+// 断言（指定名字上传、裁剪流）失去确定性。先清预设再清素材（避免删除素材时剥离引用）。
+const libAssets = await (await fetch(`${BASE}/ui-presets/assets`)).json()
+for (const asset of libAssets.assets ?? []) {
+  await fetch(`${BASE}/ui-presets/assets/${encodeURIComponent(asset.id)}`, { method: 'DELETE' }).catch(() => {})
 }
 
 const browser = await launchBrowser()
@@ -322,7 +331,7 @@ check(`壁纸文件可加载（${assetUrl.slice(0, 60)}… → ${assetRes.status
 await assetInput.setInputFiles({
   name: 'pic-dark.png',
   mimeType: 'image/png',
-  buffer: Buffer.from(PNG_BASE64, 'base64'),
+  buffer: Buffer.from(PNG_BASE64_DARK, 'base64'),
 })
 await page.waitForTimeout(500)
 const assetsAfterDark = (await (await fetch(`${BASE}/ui-presets/assets`)).json()).assets ?? []

@@ -18,6 +18,7 @@
  * - 路径穿越：safePresetId 白名单 + decode 后校验；坏 % 转义 → 400
  * - 原子写：tmp + rename（崩溃不损坏文件）
  */
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -585,9 +586,20 @@ export function apply(ctx: ContextLike, config: UiPresetsConfig = {}): void {
             }
           }
           const id = genId('asset')
+          // #106：内容级去重——同 sha256 的素材已存在 → 复用（不写第二份文件；去重 = 自动共享，
+          // 与 #103 共享语义一致）。名字/分层规格以库中已有条目为准。
+          const hash = sha256Of(bytes)
+          const dup = findDupAsset(hash)
+          if (dup !== null) {
+            // 分层合成规格（#90）随请求携带——去重命中也要合并进已有 meta（不写第二份文件）
+            if (layers !== undefined) mergeLayersIntoMeta(dup.id, layers)
+            return json(res, 200, {
+              ok: true, id: dup.id, name: dup.name, mime: dup.mime, size: dup.size, deduped: true,
+            }, { 'cache-control': 'no-store' })
+          }
           try {
             mkdirSync(ASSETS_DIR, { recursive: true })
-            writeAssetFile(id, name, mime, bytes, layers)
+            writeAssetFile(id, name, mime, bytes, layers, hash)
           } catch (error) {
             return json(res, 500, { error: `写入失败：${safeErrorMessage(error)}` })
           }
@@ -697,7 +709,15 @@ interface AssetLayers {
   h: number
 }
 
-interface AssetMeta { id: string; name: string; mime: string; size: number; layers?: AssetLayers }
+/** #106：素材 meta 携带内容哈希（sha256）——上传/导入内容级去重的依据（旧素材缺省）。 */
+interface AssetMeta {
+  id: string
+  name: string
+  mime: string
+  size: number
+  layers?: AssetLayers
+  sha256?: string
+}
 
 function assetFilePath(id: string): string {
   return join(ASSETS_DIR, id)
@@ -707,10 +727,38 @@ function assetMetaFile(id: string): string {
   return join(ASSETS_DIR, `${id}.json`)
 }
 
-/** 写素材文件 + 元数据（meta 供列表/服务 mime 用；#90 分层规格随 meta 存）。 */
-function writeAssetFile(id: string, name: string, mime: string, bytes: Uint8Array, layers?: AssetLayers): void {
+/** 写素材文件 + 元数据（meta 供列表/服务 mime/内容去重用；#90 分层规格随 meta 存）。
+ * #106：sha256 内容哈希落 meta（去重依据；旧素材缺省）。 */
+function writeAssetFile(id: string, name: string, mime: string, bytes: Uint8Array, layers?: AssetLayers, sha256?: string): void {
   writeFileSync(assetFilePath(id), bytes)
-  writeFileAtomic(assetMetaFile(id), JSON.stringify(layers === undefined ? { id, name, mime, size: bytes.length } : { id, name, mime, size: bytes.length, layers }))
+  const meta: AssetMeta = { id, name, mime, size: bytes.length }
+  if (layers !== undefined) meta.layers = layers
+  if (sha256 !== undefined) meta.sha256 = sha256
+  writeFileAtomic(assetMetaFile(id), JSON.stringify(meta))
+}
+
+/** #106：内容哈希（SHA-256 hex）。 */
+function sha256Of(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex')
+}
+
+/** #106：去重命中时合并 layers 规格到已有 meta（文件不重复写，但分层合成规格必须跟上——
+ * 否则重传/重导入分层素材后 meta 缺 layers，zip 导出丢规格、渲染降级为纯静态底）。 */
+function mergeLayersIntoMeta(id: string, layers: AssetLayers): void {
+  try {
+    const meta = readAssetMeta(id)
+    if (meta === null) return
+    if (meta.layers !== undefined && JSON.stringify(meta.layers) === JSON.stringify(layers)) return
+    writeFileAtomic(assetMetaFile(id), JSON.stringify({ ...meta, layers }))
+  } catch { /* 忽略（读取/写入失败不阻断） */ }
+}
+
+/** #106：库中同内容素材（meta.sha256 命中）；无 sha256 的旧素材不参与。 */
+function findDupAsset(hash: string): AssetMeta | null {
+  for (const meta of listAssetMetas()) {
+    if (meta.sha256 === hash) return meta
+  }
+  return null
 }
 
 function readAssetMeta(id: string): AssetMeta | null {
@@ -787,6 +835,9 @@ function storeEmbeddedAssets(preset: Preset): Preset {
   if (preset.assets === undefined) return preset
   const existing = new Set(listAssetMetas().map(meta => meta.id))
   const used = new Set<string>()
+  // #106：内容级去重——id 缺失但内容（sha256）与库中已有素材相同 → 复用已有 id，
+  // 引用改写（原 id → 已有 id），widgets/cover 同步改写（#93 教训：改 refs 忘改 widgets = 损坏）
+  const rewritten = new Map<string, string>()
   const assets = preset.assets.map(asset => {
     if (asset.dataUrl === undefined) return asset
     const comma = asset.dataUrl.indexOf(',')
@@ -795,18 +846,37 @@ function storeEmbeddedAssets(preset: Preset): Preset {
       const bytes = Uint8Array.from(Buffer.from(asset.dataUrl.slice(comma + 1), 'base64'))
       if (bytes.length > MAX_ASSET_FILE_SIZE) return { id: asset.id, name: asset.name, mime: asset.mime }
       if (!existing.has(asset.id) && !used.has(asset.id)) {
+        const dup = findDupAsset(sha256Of(bytes))
+        if (dup !== null) {
+          // 分层规格（#94）随引用携带——去重命中也要合并进已有 meta（不新增库条目）
+          if (asset.layers !== undefined) mergeLayersIntoMeta(dup.id, asset.layers)
+          rewritten.set(asset.id, dup.id)
+          return { id: dup.id, name: asset.name, mime: asset.mime }
+        }
         if (listAssetMetas().length >= MAX_ASSETS) return { id: asset.id, name: asset.name, mime: asset.mime }
         used.add(asset.id)
         mkdirSync(ASSETS_DIR, { recursive: true })
         // #94：引用带 layers 规格 → 随 meta 还原（分层壁纸导入后仍双背景渲染）
-        writeAssetFile(asset.id, asset.name, asset.mime, bytes, asset.layers)
+        writeAssetFile(asset.id, asset.name, asset.mime, bytes, asset.layers, sha256Of(bytes))
         existing.add(asset.id)
       }
       return { id: asset.id, name: asset.name, mime: asset.mime }
     } catch { /* 解码失败：保留引用（文件缺失时部件不产出样式） */ }
     return { id: asset.id, name: asset.name, mime: asset.mime }
   })
-  return { ...preset, assets }
+  if (rewritten.size === 0) return { ...preset, assets }
+  const rewriteId = (value: string): string => rewritten.get(value) ?? value
+  const widgets = (preset.widgets ?? []).map(widget => {
+    const params = { ...(widget.params ?? {}) }
+    for (const [key, value] of Object.entries(params)) {
+      if (typeof value === 'string' && rewritten.has(value)) params[key] = rewriteId(value)
+    }
+    return { ...widget, params }
+  })
+  const cover = preset.cover !== undefined && rewritten.has(preset.cover.assetId)
+    ? { ...preset.cover, assetId: rewriteId(preset.cover.assetId) }
+    : preset.cover
+  return { ...preset, assets, widgets, ...(cover !== undefined ? { cover } : {}) }
 }
 
 /** review P1-3（全量评审）：扫描库中所有预设，找出引用指定素材 id 的预设清单

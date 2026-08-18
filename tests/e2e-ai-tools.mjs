@@ -46,6 +46,12 @@ const existingList = await (await fetch(`${BASE}/ui-presets/presets`)).json()
 for (const item of existingList.presets ?? []) {
   await fetch(`${BASE}/ui-presets/presets/${encodeURIComponent(item.id)}`, { method: 'DELETE' }).catch(() => {})
 }
+// #106：清空素材库——内容去重后跨脚本残留同内容素材会让本脚本的上传去重到旧条目（旧名字），
+// asset_list 按名字断言失去确定性。先清预设再清素材。
+const preAssets = await (await fetch(`${BASE}/ui-presets/assets`)).json()
+for (const asset of preAssets.assets ?? []) {
+  await fetch(`${BASE}/ui-presets/assets/${encodeURIComponent(asset.id)}`, { method: 'DELETE' }).catch(() => {})
+}
 
 const browser = await launchBrowser()
 const page = await browser.newPage()
