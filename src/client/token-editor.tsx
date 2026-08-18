@@ -440,6 +440,8 @@ export function TokenEditor(props: TokenEditorProps): React.ReactElement {
           onAssetsChange={setAssets}
           onWidgetsChange={setWidgets}
           onAssetsAndWidgetsChange={setAssetsAndWidgets}
+          // #103：删除素材分流——本预设 id（排除自身引用；新建草稿可能为 null → 全部视为"其他预设"）
+          presetId={session.presetId ?? ''}
         />
       </div>
       {/* #74：分组染色面板（用户自建组——一次改色批量写入组内令牌） */}

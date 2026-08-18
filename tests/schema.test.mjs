@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  validatePreset, checkDshCompatibility, isAllowedCssSelector,
+  validatePreset, checkDshCompatibility, isAllowedCssSelector, normalizeDanglingCover,
   SCHEMA_VERSION, MAX_TOKENS,
 } from '../lib/core.mjs'
 
@@ -50,6 +50,28 @@ test('#56 cover 校验：引用预设内素材通过（含裁剪矩形），悬�
   assert.equal(validatePreset({ ...withAssets, cover: { assetId: 'a1', cropX: 'abc' } }).ok, false)
   // 无 cover 完全正常
   assert.equal(validatePreset(withAssets).ok, true)
+})
+
+test('#104 normalizeDanglingCover：cover 悬空自动回退（UI 删素材后保存不卡死、不写悬空）', () => {
+  const base = { ...valid, assets: [{ id: 'a1', name: 'c.png', mime: 'image/png' }] }
+  // 引用有效 → 不动
+  const keep = { ...base, cover: { assetId: 'a1' } }
+  assert.deepEqual(normalizeDanglingCover(keep), { preset: keep, dropped: false })
+  // assets 被清空/不含封面素材 → 移除 cover（回退自动生成），归一化后必须通过校验
+  const dangling = { ...base, assets: [], cover: { assetId: 'a1', cropX: '0', cropY: '0', cropW: '900', cropH: '300' } }
+  const n1 = normalizeDanglingCover(dangling)
+  assert.equal(n1.dropped, true)
+  assert.equal(n1.preset.cover, undefined)
+  assert.equal(validatePreset(n1.preset).ok, true, '归一化后必须通过校验')
+  // assets 里有其他素材但封面素材被删 → 同样回退
+  const dangling2 = { ...base, assets: [{ id: 'b2', name: 'x.png', mime: 'image/png' }], cover: { assetId: 'a1' } }
+  const n2 = normalizeDanglingCover(dangling2)
+  assert.equal(n2.dropped, true)
+  assert.equal(n2.preset.cover, undefined)
+  assert.equal(validatePreset(n2.preset).ok, true)
+  // 无 cover → 不动
+  const noCover = { ...base, assets: [] }
+  assert.deepEqual(normalizeDanglingCover(noCover), { preset: noCover, dropped: false })
 })
 
 test('#94 素材引用 layers 分层规格校验（zip 往返载体）', () => {

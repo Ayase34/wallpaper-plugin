@@ -6,7 +6,7 @@
  * 跨窗口实时同步（storage 事件/轮询）列为后置项（M0 桌面端单窗口无此需求）。
  */
 import { PresetEngine } from '../core/engine.ts'
-import { validatePreset } from '../core/schema.ts'
+import { validatePreset, normalizeDanglingCover } from '../core/schema.ts'
 import type { Preset } from '../core/schema.ts'
 import { CURRENT_DSH_VERSION } from '../core/version.ts'
 import { listPresetSources } from '../core/preset-source.ts'
@@ -397,7 +397,11 @@ export class PresetsController {
    * @returns 成功与否（失败信息在 lastError）。
    */
   async savePreset(preset: Preset, options: { activate?: boolean } = {}): Promise<boolean> {
-    const result = validatePreset(preset)
+    // #104：UI 草稿删除素材后 cover 可能悬空（草稿删除只动 assets/widgets 不动 cover）——
+    // 保存前自动回退封面（自动生成 SVG），而不是整体拒绝保存（拒绝会让用户卡死在"损坏"）
+    const normalized = normalizeDanglingCover(preset)
+    const target = normalized.preset
+    const result = validatePreset(target)
     if (!result.ok) {
       this.engine.reportError(result.errors.join('；'))
       return false
@@ -405,10 +409,10 @@ export class PresetsController {
     const activate = options.activate !== false
     // 1) 落盘（存在旧文件即备份——"有旧即备份"更安全，评审 P2-6）
     try {
-      const old = await this.loadPresetRaw(preset.id)
+      const old = await this.loadPresetRaw(target.id)
       const backupBody = old !== null ? { ...old } : null
       const body = { preset: result.preset, ...(backupBody !== null ? { backup: backupBody } : {}) }
-      const res = await fetch(`/ui-presets/presets/${encodeURIComponent(preset.id)}`, {
+      const res = await fetch(`/ui-presets/presets/${encodeURIComponent(target.id)}`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
@@ -424,7 +428,7 @@ export class PresetsController {
     // 此处的快照重挂会把它顶回保存时刻（#96 审计 C12 已知微竞态：localhost 保存窗口毫秒级，
     // 且"保留草稿令牌"的替代实现会破坏 P1-1 的空草稿 id 重挂契约——不做）
     const state = this.engine.getState()
-    if (state.hasDraft && state.draftPresetId !== result.preset.id) {
+    if (state.hasDraft && state.draftPresetId !== target.id) {
       const synced = this.engine.patchDraft(result.preset)
       if (!synced) {
         this.engine.reportError('保存已落盘，但活动预设未同步（可重启后恢复）')
@@ -441,9 +445,9 @@ export class PresetsController {
         if (!applied) promotionError = this.engine.getState().lastError
       }
       if (promotionError === null) {
-        this.persistActiveId(preset.id)
+        this.persistActiveId(target.id)
       }
-    } else if (this.engine.getState().draftPresetId === preset.id) {
+    } else if (this.engine.getState().draftPresetId === target.id) {
       this.engine.saveDraftAsActive()
     }
     if (promotionError === null) {
@@ -612,9 +616,25 @@ export class PresetsController {
   /** M2-8 壁纸库：删除素材文件。
    * review P1-3（全量评审）：返回服务端清理信息——refCount 其他预设引用数（删除时
    * 库中预设的引用已被顺带清空，UI 可提示），cleanedPresets 被清理的预设数。 */
-  async deleteAsset(id: string): Promise<{ ok: boolean; refCount?: number; cleanedPresets?: number; error?: string }> {
+  /** #103：删除素材前引用预查（GET ?refs=1）——返回引用该素材的全部预设（含当前预设，
+   * 由调用方按上下文排除）。 */
+  async getAssetRefs(id: string): Promise<Array<{ id: string; name: string }>> {
     try {
-      const res = await fetch(`/ui-presets/assets/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      const res = await fetch(`/ui-presets/assets/${encodeURIComponent(id)}?refs=1`, { headers: { accept: 'application/json' } })
+      if (!res.ok) return []
+      const body = await res.json().catch(() => ({})) as { refs?: Array<{ id: string; name: string }> }
+      return body.refs ?? []
+    } catch { return [] }
+  }
+
+  async deleteAsset(id: string, options: { presetId?: string } = {}): Promise<{ ok: boolean; refCount?: number; cleanedPresets?: number; error?: string }> {
+    try {
+      // #103：detach 模式（?mode=detach&preset=<id>）——只剥离指定预设的引用、文件保留，
+      // 其他预设不受影响；不带参数 = 全局删除（剥离所有引用 + 删文件，现状行为）
+      const query = options.presetId !== undefined && options.presetId !== ''
+        ? `?mode=detach&preset=${encodeURIComponent(options.presetId)}`
+        : ''
+      const res = await fetch(`/ui-presets/assets/${encodeURIComponent(id)}${query}`, { method: 'DELETE' })
       const body = await res.json().catch(() => ({})) as { ok?: unknown; refCount?: unknown; cleanedPresets?: unknown; error?: unknown }
       if (!res.ok) {
         return { ok: false, error: typeof body.error === 'string' ? body.error : '删除失败' }

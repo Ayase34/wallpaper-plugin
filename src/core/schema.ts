@@ -510,6 +510,21 @@ export function validatePreset(raw: unknown): ValidationResult {
 }
 
 /**
+ * #104：保存/更新前归一化——cover 引用不在 assets 声明里（悬空，如 UI 草稿删除素材后
+ * 草稿未联动清封面）→ 移除 cover（回退自动生成，与 #56「删除素材顺带清封面」同语义）。
+ * 返回 { preset, dropped }。schema 校验仍拒绝悬空 cover（zip 导入等外部载荷 fail-loud），
+ * 写入口（savePreset/updatePresetFile）先归一化保证 UI/AI 流程不因悬空封面卡死。
+ */
+export function normalizeDanglingCover(preset: Preset): { preset: Preset; dropped: boolean } {
+  const cover = preset.cover
+  if (cover === undefined) return { preset, dropped: false }
+  const assets = preset.assets ?? []
+  if (assets.some(asset => asset.id === cover.assetId)) return { preset, dropped: false }
+  const { cover: _dropped, ...rest } = preset
+  return { preset: rest as Preset, dropped: true }
+}
+
+/**
  * 版本契约检查：minDshVersion > 当前 DSH 版本 → 拒绝应用。
  * @param preset - 已校验预设。
  * @param currentDshVersion - 当前 DSH 版本（如 '0.1.0-rc.5'）。

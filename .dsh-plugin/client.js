@@ -642,6 +642,14 @@ function validatePreset(raw) {
   if (Object.keys(extra).length > 0) preset2.extra = extra;
   return { ok: true, preset: preset2 };
 }
+function normalizeDanglingCover(preset2) {
+  const cover = preset2.cover;
+  if (cover === void 0) return { preset: preset2, dropped: false };
+  const assets = preset2.assets ?? [];
+  if (assets.some((asset) => asset.id === cover.assetId)) return { preset: preset2, dropped: false };
+  const { cover: _dropped, ...rest } = preset2;
+  return { preset: rest, dropped: true };
+}
 function checkDshCompatibility(preset2, currentDshVersion) {
   if (preset2.minDshVersion === void 0) return null;
   const required = parseVersion(preset2.minDshVersion);
@@ -1386,17 +1394,19 @@ var PresetsController = class {
    * @returns 成功与否（失败信息在 lastError）。
    */
   async savePreset(preset2, options = {}) {
-    const result = validatePreset(preset2);
+    const normalized = normalizeDanglingCover(preset2);
+    const target = normalized.preset;
+    const result = validatePreset(target);
     if (!result.ok) {
       this.engine.reportError(result.errors.join("\uFF1B"));
       return false;
     }
     const activate = options.activate !== false;
     try {
-      const old = await this.loadPresetRaw(preset2.id);
+      const old = await this.loadPresetRaw(target.id);
       const backupBody = old !== null ? { ...old } : null;
       const body = { preset: result.preset, ...backupBody !== null ? { backup: backupBody } : {} };
-      const res = await fetch(`/ui-presets/presets/${encodeURIComponent(preset2.id)}`, {
+      const res = await fetch(`/ui-presets/presets/${encodeURIComponent(target.id)}`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body)
@@ -1407,7 +1417,7 @@ var PresetsController = class {
       return false;
     }
     const state = this.engine.getState();
-    if (state.hasDraft && state.draftPresetId !== result.preset.id) {
+    if (state.hasDraft && state.draftPresetId !== target.id) {
       const synced = this.engine.patchDraft(result.preset);
       if (!synced) {
         this.engine.reportError("\u4FDD\u5B58\u5DF2\u843D\u76D8\uFF0C\u4F46\u6D3B\u52A8\u9884\u8BBE\u672A\u540C\u6B65\uFF08\u53EF\u91CD\u542F\u540E\u6062\u590D\uFF09");
@@ -1422,9 +1432,9 @@ var PresetsController = class {
         if (!applied) promotionError = this.engine.getState().lastError;
       }
       if (promotionError === null) {
-        this.persistActiveId(preset2.id);
+        this.persistActiveId(target.id);
       }
-    } else if (this.engine.getState().draftPresetId === preset2.id) {
+    } else if (this.engine.getState().draftPresetId === target.id) {
       this.engine.saveDraftAsActive();
     }
     if (promotionError === null) {
@@ -1573,9 +1583,22 @@ var PresetsController = class {
   /** M2-8 壁纸库：删除素材文件。
    * review P1-3（全量评审）：返回服务端清理信息——refCount 其他预设引用数（删除时
    * 库中预设的引用已被顺带清空，UI 可提示），cleanedPresets 被清理的预设数。 */
-  async deleteAsset(id) {
+  /** #103：删除素材前引用预查（GET ?refs=1）——返回引用该素材的全部预设（含当前预设，
+   * 由调用方按上下文排除）。 */
+  async getAssetRefs(id) {
     try {
-      const res = await fetch(`/ui-presets/assets/${encodeURIComponent(id)}`, { method: "DELETE" });
+      const res = await fetch(`/ui-presets/assets/${encodeURIComponent(id)}?refs=1`, { headers: { accept: "application/json" } });
+      if (!res.ok) return [];
+      const body = await res.json().catch(() => ({}));
+      return body.refs ?? [];
+    } catch {
+      return [];
+    }
+  }
+  async deleteAsset(id, options = {}) {
+    try {
+      const query = options.presetId !== void 0 && options.presetId !== "" ? `?mode=detach&preset=${encodeURIComponent(options.presetId)}` : "";
+      const res = await fetch(`/ui-presets/assets/${encodeURIComponent(id)}${query}`, { method: "DELETE" });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         return { ok: false, error: typeof body.error === "string" ? body.error : "\u5220\u9664\u5931\u8D25" };
@@ -3862,13 +3885,12 @@ function WidgetEditor(props) {
       return { ...widget, params };
     });
     props.onAssetsAndWidgetsChange(nextAssets, nextWidgets);
-    void controller2?.deleteAsset(id).then((result) => {
-      if (result?.ok === false) {
-        window.alert(result.error ?? "\u5220\u9664\u7D20\u6750\u5931\u8D25");
-        return;
-      }
-      if ((result?.refCount ?? 0) > 0) {
-        window.alert(`\u7D20\u6750\u5DF2\u5220\u9664\uFF1B\u5E93\u4E2D ${result.refCount} \u4E2A\u9884\u8BBE\u5F15\u7528\u8BE5\u7D20\u6750\uFF0C\u76F8\u5173\u90E8\u4EF6\u5DF2\u81EA\u52A8\u6E05\u7A7A\u3002`);
+    void controller2?.getAssetRefs(id).then((refs) => {
+      const others = (refs ?? []).filter((ref) => ref.id !== props.presetId);
+      if (others.length === 0) {
+        void controller2?.deleteAsset(id);
+      } else {
+        setDeleteChoice({ assetId: id, refs: others });
       }
     });
   };
@@ -4023,6 +4045,7 @@ function WidgetEditor(props) {
   const schemeMode = props.widgets.some((w) => Object.keys(w.params).some((k) => k.endsWith("Dark")));
   const schemeChecked = schemeModeOn || schemeMode;
   const [confirmBox, setConfirmBox] = React5.useState(null);
+  const [deleteChoice, setDeleteChoice] = React5.useState(null);
   const toggleSchemeMode = (checked) => {
     if (!checked && schemeMode) {
       setConfirmBox({
@@ -4169,6 +4192,76 @@ function WidgetEditor(props) {
         setConfirmBox(null);
       }
     }
+  ), deleteChoice !== null && /* @__PURE__ */ React5.createElement(
+    "div",
+    {
+      "data-up-delete-choice": true,
+      role: "dialog",
+      "aria-label": "\u5220\u9664\u7D20\u6750",
+      tabIndex: -1,
+      onKeyDownCapture: (e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          setDeleteChoice(null);
+        }
+      },
+      style: {
+        position: "fixed",
+        inset: 0,
+        zIndex: 1300,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(0, 0, 0, 0.45)",
+        outline: "none"
+      }
+    },
+    /* @__PURE__ */ React5.createElement(
+      "div",
+      {
+        style: {
+          width: "min(440px, calc(100vw - 48px))",
+          background: "var(--dsw-alias-bg-layer-1, #fff)",
+          color: "var(--dsw-alias-label-primary, #111)",
+          borderRadius: 12,
+          padding: 16,
+          border: "1px solid var(--dsw-alias-border-l2, #ddd)",
+          boxShadow: "0 12px 40px rgba(0,0,0,0.3)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 12
+        }
+      },
+      /* @__PURE__ */ React5.createElement("span", { style: { fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap" } }, `\u7D20\u6750\u6B63\u88AB ${deleteChoice.refs.length} \u4E2A\u5176\u4ED6\u9884\u8BBE\u4F7F\u7528\uFF08${deleteChoice.refs.map((r) => r.name).join("\u3001")}\uFF09\u3002\u5220\u9664\u65B9\u5F0F\uFF1F`),
+      /* @__PURE__ */ React5.createElement("div", { style: { display: "flex", justifyContent: "flex-end", gap: 8 } }, /* @__PURE__ */ React5.createElement("button", { type: "button", "data-up-btn": true, onClick: () => {
+        setDeleteChoice(null);
+      } }, "\u53D6\u6D88"), /* @__PURE__ */ React5.createElement(
+        "button",
+        {
+          type: "button",
+          "data-up-btn": true,
+          onClick: () => {
+            const choice = deleteChoice;
+            setDeleteChoice(null);
+            void controller2?.deleteAsset(choice.assetId, { presetId: props.presetId });
+          }
+        },
+        "\u4EC5\u4ECE\u672C\u9884\u8BBE\u79FB\u9664"
+      ), /* @__PURE__ */ React5.createElement(
+        "button",
+        {
+          type: "button",
+          "data-up-btn": true,
+          "data-up-btn-primary": true,
+          onClick: () => {
+            const choice = deleteChoice;
+            setDeleteChoice(null);
+            void controller2?.deleteAsset(choice.assetId);
+          }
+        },
+        "\u5F7B\u5E95\u5220\u9664"
+      ))
+    )
   ));
 }
 
@@ -4492,7 +4585,8 @@ function TokenEditor(props) {
       widgets: session.widgets,
       onAssetsChange: setAssets,
       onWidgetsChange: setWidgets,
-      onAssetsAndWidgetsChange: setAssetsAndWidgets
+      onAssetsAndWidgetsChange: setAssetsAndWidgets,
+      presetId: session.presetId ?? ""
     }
   )), session.groups.length > 0 && /* @__PURE__ */ React6.createElement("div", { "data-up-groups": true, style: { borderTop: "1px solid var(--dsw-alias-border-l2)", paddingTop: 8, display: "flex", flexDirection: "column", gap: 6 } }, /* @__PURE__ */ React6.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600, color: "var(--dsw-alias-label-secondary)" } }, /* @__PURE__ */ React6.createElement("span", null, "\u5206\u7EC4\u67D3\u8272"), /* @__PURE__ */ React6.createElement("span", { style: { fontWeight: 400, fontSize: 10, color: "var(--dsw-alias-label-tertiary, #999)" } }, /* @__PURE__ */ React6.createElement("label", { style: { display: "inline-flex", alignItems: "center", gap: 4, cursor: "pointer" } }, /* @__PURE__ */ React6.createElement("input", { type: "checkbox", checked: groupSchemeMode, onChange: (e) => {
     setGroupSchemeMode(e.target.checked);

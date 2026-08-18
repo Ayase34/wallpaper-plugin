@@ -26,6 +26,8 @@ export interface WidgetEditorProps {
   /** 修复轮 #40：素材+部件批量更新（删除素材需同时改两个字段——分开调两次
    * 会基于同一旧 session 闭包，React 批处理下后一次覆盖前一次，被删素材被顶回）。 */
   onAssetsAndWidgetsChange: (assets: WidgetAssetRef[], widgets: PresetWidget[]) => void
+  /** #103：当前编辑的预设 id——删除素材时排除本预设，只对"其他预设引用"弹分流确认。 */
+  presetId: string
 }
 
 export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
@@ -131,15 +133,15 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
       return { ...widget, params }
     })
     props.onAssetsAndWidgetsChange(nextAssets, nextWidgets)
-    // review P1-3（全量评审）：删除素材（库级）——服务端顺带清空库中其他预设的引用，
-    // 返回引用信息供提示（素材为库级共享，其他预设的壁纸会随之失效）。
-    void controller?.deleteAsset(id).then(result => {
-      if (result?.ok === false) {
-        window.alert(result.error ?? '删除素材失败')
-        return
-      }
-      if ((result?.refCount ?? 0) > 0) {
-        window.alert(`素材已删除；库中 ${result.refCount} 个预设引用该素材，相关部件已自动清空。`)
+    // #103：删除分流——先查其他预设引用（库级共享素材）：无 → 直接删；有 → 弹层二选一
+    // （默认「仅从本预设移除」：文件保留、其他预设不受影响；「彻底删除」= 现状行为）。
+    // 原实现删完才弹 alert 告知"N 个预设被清空"，误删会拖垮其他预设（用户实测反馈）。
+    void controller?.getAssetRefs(id).then(refs => {
+      const others = (refs ?? []).filter(ref => ref.id !== props.presetId)
+      if (others.length === 0) {
+        void controller?.deleteAsset(id)
+      } else {
+        setDeleteChoice({ assetId: id, refs: others })
       }
     })
   }
@@ -330,6 +332,8 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
   const schemeChecked = schemeModeOn || schemeMode
   // #58：关闭确认用应用内模态（原生 confirm 桌面端丢键盘焦点）
   const [confirmBox, setConfirmBox] = React.useState<{ message: string; action: () => void } | null>(null)
+  // #103：删除分流确认（素材被其他预设引用时二选一）
+  const [deleteChoice, setDeleteChoice] = React.useState<{ assetId: string; refs: Array<{ id: string; name: string }> } | null>(null)
   const toggleSchemeMode = (checked: boolean): void => {
     if (!checked && schemeMode) {
       setConfirmBox({
@@ -495,6 +499,63 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
           }}
           onCancel={() => { setConfirmBox(null) }}
         />
+      )}
+      {/* #103：删除分流确认——素材被其他预设引用时二选一（默认推荐仅从本预设移除） */}
+      {deleteChoice !== null && (
+        <div
+          data-up-delete-choice
+          role="dialog"
+          aria-label="删除素材"
+          tabIndex={-1}
+          onKeyDownCapture={e => {
+            if (e.key === 'Escape') {
+              e.stopPropagation()
+              setDeleteChoice(null)
+            }
+          }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0, 0, 0, 0.45)', outline: 'none',
+          }}
+        >
+          <div
+            style={{
+              width: 'min(440px, calc(100vw - 48px))',
+              background: 'var(--dsw-alias-bg-layer-1, #fff)', color: 'var(--dsw-alias-label-primary, #111)',
+              borderRadius: 12, padding: 16, border: '1px solid var(--dsw-alias-border-l2, #ddd)',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column', gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+              {`素材正被 ${deleteChoice.refs.length} 个其他预设使用（${deleteChoice.refs.map(r => r.name).join('、')}）。删除方式？`}
+            </span>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button type="button" data-up-btn onClick={() => { setDeleteChoice(null) }}>取消</button>
+              <button
+                type="button" data-up-btn
+                onClick={() => {
+                  const choice = deleteChoice
+                  setDeleteChoice(null)
+                  // 仅从本预设移除：草稿已剥离本地引用；服务端剥离该预设保存文件的引用、文件保留
+                  void controller?.deleteAsset(choice.assetId, { presetId: props.presetId })
+                }}
+              >
+                仅从本预设移除
+              </button>
+              <button
+                type="button" data-up-btn data-up-btn-primary
+                onClick={() => {
+                  const choice = deleteChoice
+                  setDeleteChoice(null)
+                  // 彻底删除：剥离所有引用 + 删除文件（原行为；已前置告知受影响预设）
+                  void controller?.deleteAsset(choice.assetId)
+                }}
+              >
+                彻底删除
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

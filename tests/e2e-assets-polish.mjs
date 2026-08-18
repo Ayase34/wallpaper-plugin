@@ -1,6 +1,6 @@
 // M3-3 标准版打磨 e2e + #52 裁剪流：素材缩略图 + 一键设为聊天背景（→ 16:9 裁剪框 → 裁剪副本赋值）。
 // 验证：缩略图真实渲染 → 快捷按钮弹裁剪框（固定比例/缩放/透明提示）→ 确认后裁剪副本入库并选中
-// → 实时注入生效 → 保存落盘引用裁剪副本 → 删除裁剪副本后引用清空。
+// → 实时注入生效 → 保存落盘引用裁剪副本 → #103 删除分流（共享素材：仅从本预设移除 / 彻底删除）。
 import { launchBrowser, dismissBetaNotice } from './e2e-util.mjs'
 
 const BASE = process.argv[2] ?? 'http://127.0.0.1:3180'
@@ -124,14 +124,53 @@ const sourceAsset = (preset.assets ?? []).find(a => a.id === chatWidget?.params.
 check('落盘 chat-background 引用原图 + 裁剪参数', sourceAsset !== undefined && sourceAsset.name === 'thumb.png'
   && chatWidget?.params.cropX !== undefined && chatWidget?.params.cropW !== undefined)
 
-// 5. 删除原图（源） → 引用清空 + chip 消失（修复轮 #40 批量更新继续有效）
-if (sourceAsset !== undefined) {
+// 5. #103 删除分流（用户实测反馈：共享素材被删 → 其他预设壁纸损坏）：先建第二个预设共享
+//    同一素材 → UI 删除弹分流确认 → 「仅从本预设移除」→ 其他预设引用与文件保留；
+//    再彻底删除 → 其他预设引用剥离 + 文件删除
+const sharedId = chatWidget?.params?.assetId
+check('#103 共享素材 id 可查（当前会话素材）', sharedId !== undefined)
+if (sharedId !== undefined) {
+  await fetch(`${BASE}/ui-presets/presets/asset-share-b`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      preset: {
+        schemaVersion: 1, edition: 'standard', id: 'asset-share-b', name: '共享B',
+        tokens: { '--dsw-alias-bg-base': { light: '#fff', dark: '#000' } },
+        assets: [{ id: sharedId, name: 'thumb.png', mime: 'image/png' }],
+        widgets: [{ id: 'chat-background', params: { assetId: sharedId, opacity: '1' } }],
+      },
+    }),
+  })
   await studio.getByRole('button', { name: `删除素材 thumb.png` }).click()
+  const choice = page.locator('[data-up-delete-choice]')
+  await choice.waitFor({ timeout: 10000 })
+  const choiceText = await choice.innerText()
+  check(`#103 删除分流弹层出现（列出其他预设：${choiceText.includes('共享B') ? '共享B' : '？'}）`,
+    choiceText.includes('1 个其他预设') && choiceText.includes('共享B'))
+  await choice.getByRole('button', { name: '仅从本预设移除' }).click()
+  await choice.waitFor({ state: 'detached', timeout: 10000 })
   await page.waitForTimeout(500)
-  const chatSelect2 = studio.getByLabel('chat-background assetId')
-  check('删除源图后部件引用自动清空', (await chatSelect2.inputValue()) === '')
-  const chipTextsAfter = (await studio.locator('[data-up-asset]').allTextContents()).join('\n')
-  check('源图 chip 消失（批量更新生效）', !chipTextsAfter.includes('thumb.png'))
+  // 本预设草稿已剥离：部件引用清空 + chip 消失
+  const chatSelect3 = studio.getByLabel('chat-background assetId')
+  check('#103 detach 后本预设部件引用清空', (await chatSelect3.inputValue()) === '')
+  const chipTextsAfterDetach = (await studio.locator('[data-up-asset]').allTextContents()).join('\n')
+  check('#103 detach 后 chip 消失（批量更新生效）', !chipTextsAfterDetach.includes('thumb.png'))
+  // 其他预设引用保留 + 文件保留
+  const shareB = await (await fetch(`${BASE}/ui-presets/presets/asset-share-b`)).json()
+  check('#103 detach 后其他预设引用保留',
+    (shareB.preset?.assets ?? []).some(a => a.id === sharedId)
+    && (shareB.preset?.widgets ?? []).some(w => w.params?.assetId === sharedId))
+  const fileAfterDetach = await fetch(`${BASE}/ui-presets/assets/${sharedId}`)
+  check('#103 detach 后文件保留（HTTP 200）', fileAfterDetach.status === 200)
+  // 彻底删除 → 其他预设引用剥离 + 文件删除
+  const globalDel = await fetch(`${BASE}/ui-presets/assets/${sharedId}`, { method: 'DELETE' })
+  const shareB2 = await (await fetch(`${BASE}/ui-presets/presets/asset-share-b`)).json()
+  const fileAfterGlobal = await fetch(`${BASE}/ui-presets/assets/${sharedId}`)
+  check('#103 彻底删除后其他预设引用剥离 + 文件删除',
+    globalDel.ok === true && (shareB2.preset?.assets ?? []).length === 0
+    && fileAfterGlobal.status === 404)
+  await fetch(`${BASE}/ui-presets/presets/asset-share-b`, { method: 'DELETE' }).catch(() => {})
 }
 
 console.log(`\n${pass} checks passed`)

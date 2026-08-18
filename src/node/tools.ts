@@ -9,7 +9,7 @@
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { validatePreset } from '../core/schema.ts'
+import { validatePreset, normalizeDanglingCover } from '../core/schema.ts'
 import type { Preset } from '../core/schema.ts'
 import { catalog } from '../core/catalog.ts'
 import { KNOBS, KNOB_CATEGORIES } from '../core/knobs.ts'
@@ -353,7 +353,10 @@ export function updatePresetFile(
       }
     }
   }
-  const result = validatePreset(merged)
+  // #104：AI 替换 assets 时 cover 可能悬空（新 assets 不含原封面素材）——先归一化回退
+  // 自动生成封面，再校验（与 UI 保存同语义；zip 导入等外部载荷仍 fail-loud）
+  const normalized = normalizeDanglingCover(merged as Preset)
+  const result = validatePreset(normalized.preset)
   if (!result.ok) throw new Error(`preset_update: ${result.errors.join('；')}`)
   const dir = join(env.presetsDir, id)
   mkdirSync(dir, { recursive: true })

@@ -612,8 +612,25 @@ export function apply(ctx: ContextLike, config: UiPresetsConfig = {}): void {
           const rest = stripPrefix(pathname, `${ROUTE_PREFIX}/assets`)
           const decoded = rest === null ? null : decodeSegment(rest)
           if (decoded === null || !safePresetId(decoded)) return json(res, 400, { error: 'invalid asset id' })
+          const requestUrl = new URL(req.url ?? '/', 'http://dsh.internal')
+          // #103：删除前引用预查（GET ?refs=1 → 引用预设清单；不走文件读取分支）
+          if (req.method === 'GET' && requestUrl.searchParams.get('refs') !== null) {
+            return json(res, 200, { refs: findAssetRefPresets(decoded) }, { 'cache-control': 'no-store' })
+          }
           if (req.method === 'DELETE') {
             if (isCrossOrigin(req)) return json(res, 403, { error: 'cross-origin request rejected' })
+            // #103：detach 模式（?mode=detach&preset=<id>）——只剥离指定预设的引用、文件保留，
+            // 其他预设不受影响（删除分流：误删不再拖垮共享素材的其他预设）
+            const mode = requestUrl.searchParams.get('mode')
+            const presetScope = requestUrl.searchParams.get('preset')
+            if (mode === 'detach' && presetScope !== null && presetScope !== '' && safePresetId(presetScope)) {
+              const cleaned = stripAssetRefsFromPresets(decoded, presetScope)
+              const remaining = findAssetRefPresets(decoded)
+              return json(res, 200, {
+                ok: true, id: decoded, detached: true, cleanedPresets: cleaned,
+                refs: remaining.map(r => r.name), refCount: remaining.length,
+              }, { 'cache-control': 'no-store' })
+            }
             // review P1-3（全量评审）：删除前扫描库中引用并顺带清理（素材为库级共享——
             // 其他预设的引用随删除清空，不留死 URL；返回引用信息供 UI 提示）。
             // #90：分层合成壁纸的动图引用（其他资产 meta 的 layers.animAssetId）也顺带剥离——
@@ -811,13 +828,16 @@ function findAssetRefPresets(assetId: string): Array<{ id: string; name: string 
 }
 
 /** review P1-3（全量评审）：删除素材时顺带清理库中预设对该素材的引用并写回
- * （素材为库级共享——不清理则其他预设留下死 URL 引用，壁纸静默失效）。 */
-function stripAssetRefsFromPresets(assetId: string): number {
+ * （素材为库级共享——不清理则其他预设留下死 URL 引用，壁纸静默失效）。
+ * #103：可选 onlyPresetId 作用域——「仅从本预设移除」（detach）只剥离指定预设的引用、
+ * 文件保留（其他预设不受影响）；缺省 = 全库剥离（删除文件前的现状行为）。 */
+function stripAssetRefsFromPresets(assetId: string, onlyPresetId?: string): number {
   let cleaned = 0
   let dirs: string[] = []
   try { dirs = readdirSync(PRESETS_DIR) } catch { return cleaned }
   for (const dir of dirs) {
     if (!safePresetId(dir)) continue
+    if (onlyPresetId !== undefined && onlyPresetId !== dir) continue
     const file = join(PRESETS_DIR, dir, 'preset.json')
     try {
       const preset = JSON.parse(readFileSync(file, 'utf8')) as Preset
@@ -836,6 +856,13 @@ function stripAssetRefsFromPresets(assetId: string): number {
       // #56：封面引用该素材 → 移除手设封面（回退自动生成）
       let nextCover = preset.cover
       if (preset.cover?.assetId === assetId) {
+        nextCover = undefined
+        changed = true
+      }
+      // #104：最终态守卫——多素材连删/并发时序下，上一次 strip 读到的旧 cover 可能被后写回
+      // （仅匹配单 assetId 的清理对"多个删除交错"不完整）——凡 cover 悬空（不在最终 assets 里）
+      // 一律移除，绝不写回悬空引用（用户实测：连删 3 素材后 default 预设损坏打不开）
+      if (nextCover !== undefined && !nextAssets.some(a => a.id === nextCover.assetId)) {
         nextCover = undefined
         changed = true
       }

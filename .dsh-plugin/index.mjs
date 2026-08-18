@@ -1206,6 +1206,14 @@ function validatePreset(raw) {
   if (Object.keys(extra2).length > 0) preset2.extra = extra2;
   return { ok: true, preset: preset2 };
 }
+function normalizeDanglingCover(preset2) {
+  const cover = preset2.cover;
+  if (cover === void 0) return { preset: preset2, dropped: false };
+  const assets = preset2.assets ?? [];
+  if (assets.some((asset) => asset.id === cover.assetId)) return { preset: preset2, dropped: false };
+  const { cover: _dropped, ...rest } = preset2;
+  return { preset: rest, dropped: true };
+}
 
 // src/core/catalog-data.ts
 var CATALOG_DSH_VERSION = "0.1.0-rc.5";
@@ -2484,7 +2492,8 @@ function updatePresetFile(env, id, patch) {
       };
     }
   }
-  const result = validatePreset(merged);
+  const normalized = normalizeDanglingCover(merged);
+  const result = validatePreset(normalized.preset);
   if (!result.ok) throw new Error(`preset_update: ${result.errors.join("\uFF1B")}`);
   const dir = join(env.presetsDir, id);
   mkdirSync(dir, { recursive: true });
@@ -3587,8 +3596,26 @@ function apply(ctx, config = {}) {
             const rest = stripPrefix(pathname, `${ROUTE_PREFIX}/assets`);
             const decoded = rest === null ? null : decodeSegment(rest);
             if (decoded === null || !safePresetId(decoded)) return json(res, 400, { error: "invalid asset id" });
+            const requestUrl = new URL(req.url ?? "/", "http://dsh.internal");
+            if (req.method === "GET" && requestUrl.searchParams.get("refs") !== null) {
+              return json(res, 200, { refs: findAssetRefPresets(decoded) }, { "cache-control": "no-store" });
+            }
             if (req.method === "DELETE") {
               if (isCrossOrigin(req)) return json(res, 403, { error: "cross-origin request rejected" });
+              const mode = requestUrl.searchParams.get("mode");
+              const presetScope = requestUrl.searchParams.get("preset");
+              if (mode === "detach" && presetScope !== null && presetScope !== "" && safePresetId(presetScope)) {
+                const cleaned2 = stripAssetRefsFromPresets(decoded, presetScope);
+                const remaining = findAssetRefPresets(decoded);
+                return json(res, 200, {
+                  ok: true,
+                  id: decoded,
+                  detached: true,
+                  cleanedPresets: cleaned2,
+                  refs: remaining.map((r) => r.name),
+                  refCount: remaining.length
+                }, { "cache-control": "no-store" });
+              }
               const refs = findAssetRefPresets(decoded);
               const cleaned = stripAssetRefsFromPresets(decoded);
               const degraded = stripLayersRefsFromAssets(decoded);
@@ -3757,7 +3784,7 @@ function findAssetRefPresets(assetId) {
   }
   return out;
 }
-function stripAssetRefsFromPresets(assetId) {
+function stripAssetRefsFromPresets(assetId, onlyPresetId) {
   let cleaned = 0;
   let dirs = [];
   try {
@@ -3767,6 +3794,7 @@ function stripAssetRefsFromPresets(assetId) {
   }
   for (const dir of dirs) {
     if (!safePresetId(dir)) continue;
+    if (onlyPresetId !== void 0 && onlyPresetId !== dir) continue;
     const file = join2(PRESETS_DIR, dir, "preset.json");
     try {
       const preset2 = JSON.parse(readFileSync2(file, "utf8"));
@@ -3787,6 +3815,10 @@ function stripAssetRefsFromPresets(assetId) {
       });
       let nextCover = preset2.cover;
       if (preset2.cover?.assetId === assetId) {
+        nextCover = void 0;
+        changed = true;
+      }
+      if (nextCover !== void 0 && !nextAssets.some((a) => a.id === nextCover.assetId)) {
         nextCover = void 0;
         changed = true;
       }
