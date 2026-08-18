@@ -1,7 +1,9 @@
-# ---- 依赖与构建产物（npm run build 生成；运行时经 profile 链接需要本地构建产物） ----
+# ---- 依赖与本地临时文件 ----
 node_modules/
-lib/
-.dsh-plugin/
+
+# 注意：.dsh-plugin/ 与 lib/ 为**构建产物但随仓库提交**——DSH 运行时直接加载
+# .dsh-plugin/index.mjs + client.js，GitHub 安装（pnpm add github:...）无法先构建，
+# 必须开箱即用；产物一致性由 `npm run check:client` 守卫（手改生成物禁止）。
 
 # ---- 测试临时日志（可重新生成） ----
 .regression-last.txt

@@ -24,31 +24,10 @@ DSH（DeepSeek Harness）第三方插件：主题预设管理与壁纸系统。�
 ### 安装步骤
 
 ```sh
-# 1) 构建——需 DSH_CHECKOUT 指向 deepseek-harness checkout
-#    （构建把其 vendor/schemastery + vendor/cosmokit 打包自包含，见「开发」节）
-#    Windows PowerShell:
-#    $env:DSH_CHECKOUT = "C:/path/to/deepseek-harness"
-cd wallpaper-plugin
-npm install          # 或 pnpm install（安装 esbuild devDependency）
-npm run build
-
-# 2) 装入 profile
+# 装入 profile
 dsh plugin --profile <name> add <本目录>
 ```
 
-手动安装（等价）：编辑 `$DSH_HOME/profiles/<name>/package.json`，在 `dependencies` 加 `"wallpaper-plugin": "link:<本目录>"`，在 `dsh.profile.bundles` 列表追加 `wallpaper-plugin`，然后在该 profile 目录执行 `pnpm install`。
-
-### 启动失败恢复
-
-本插件有零抛错防线，但若安装后应用仍无法启动（fail-loud 红线与官方插件同语义）：
-
-1. 编辑 `$DSH_HOME/profiles/<name>/cordis.patch.yml`，加入：
-   ```yaml
-   - id: wallpaper-plugin
-     disabled: true
-   ```
-2. 重启应用 → 正常启动。
-3. 把问题反馈给作者修复后，删除上面两行恢复启用。
 
 ### 插件配置（可选）
 
@@ -65,9 +44,8 @@ dsh plugin --profile <name> add <本目录>
 
 ## 快速开始
 
-1. 设置页 →「外观预设」→ 应用出厂预设「默认」（海蓝主题）
+1. 设置页 →「外观预设」→ 应用出厂预设
 2. 工作室「素材与部件」区上传图片 → 点「设为聊天背景」一键启用（自动按 16:9 裁剪）
-3. 想要动图/拼贴：点「图层合成壁纸」→ 素材面板加入图层、摆放 →「合成并上传」→ 在部件下拉选用
 4. 分享：「导出 ZIP」→ 发给别人 → 对方在工作室/预设墙「导入」
 
 ## 开发
