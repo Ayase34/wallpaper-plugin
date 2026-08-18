@@ -2737,19 +2737,22 @@ function createPresetToolDefs(env, defineTool) {
           scope: entry.scope,
           description: entry.description !== "" ? entry.description : TOKEN_DESCRIPTIONS[entry.name] ?? ""
         }));
-        const knobs = KNOBS.map((knob) => ({
-          id: knob.id,
-          name: knob.name,
-          description: knob.description,
-          tokens: knob.bundle,
-          category: knob.category,
-          control: knob.control,
-          min: knob.min,
-          max: knob.max,
-          step: knob.step,
-          unit: knob.unit,
-          options: knob.options
-        }));
+        const knobs = KNOBS.map((knob) => {
+          const entry = {
+            id: knob.id,
+            name: knob.name,
+            description: knob.description,
+            tokens: knob.bundle,
+            category: knob.category,
+            control: knob.control
+          };
+          if (knob.min !== void 0) entry.min = knob.min;
+          if (knob.max !== void 0) entry.max = knob.max;
+          if (knob.step !== void 0) entry.step = knob.step;
+          if (knob.unit !== void 0) entry.unit = knob.unit;
+          if (knob.options !== void 0) entry.options = knob.options;
+          return entry;
+        });
         const knobCategories = KNOB_CATEGORIES.map((cat) => ({ id: cat.id, name: cat.name, description: cat.description }));
         return Promise.resolve({ matched: matchedEntries.length, tokens, knobs, knob_categories: knobCategories, css_anchors: CSS_ANCHORS, styles: STYLE_GUIDE });
       },

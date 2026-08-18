@@ -624,20 +624,26 @@ export function createPresetToolDefs(
           scope: entry.scope,
           description: entry.description !== '' ? entry.description : (TOKEN_DESCRIPTIONS[entry.name] ?? ''),
         }))
-        // #68 P2：knobs 补控件语义（category/control/数值边界/选项）——LLM 知道 select 的取值集合
-        const knobs = KNOBS.map(knob => ({
-          id: knob.id,
-          name: knob.name,
-          description: knob.description,
-          tokens: knob.bundle,
-          category: knob.category,
-          control: knob.control,
-          min: knob.min,
-          max: knob.max,
-          step: knob.step,
-          unit: knob.unit,
-          options: knob.options,
-        }))
+        // #68 P2：knobs 补控件语义（category/control/数值边界/选项）——LLM 知道 select 的取值集合。
+        // #101：可选字段（min/max/step/unit/options）**只在有值时写入**——color 类旋钮这些字段为
+        // undefined，宿主输出校验要求无损 JSON（undefined 被 JSON 序列化静默丢弃 → 整体拒收，
+        // "value is not lossless JSON"；stub defineTool 掩盖，e2e/verify-tools 均未走宿主校验）。
+        const knobs = KNOBS.map(knob => {
+          const entry: Record<string, unknown> = {
+            id: knob.id,
+            name: knob.name,
+            description: knob.description,
+            tokens: knob.bundle,
+            category: knob.category,
+            control: knob.control,
+          }
+          if (knob.min !== undefined) entry.min = knob.min
+          if (knob.max !== undefined) entry.max = knob.max
+          if (knob.step !== undefined) entry.step = knob.step
+          if (knob.unit !== undefined) entry.unit = knob.unit
+          if (knob.options !== undefined) entry.options = knob.options
+          return entry
+        })
         const knobCategories = KNOB_CATEGORIES.map(cat => ({ id: cat.id, name: cat.name, description: cat.description }))
         return Promise.resolve({ matched: matchedEntries.length, tokens, knobs, knob_categories: knobCategories, css_anchors: CSS_ANCHORS, styles: STYLE_GUIDE })
       },

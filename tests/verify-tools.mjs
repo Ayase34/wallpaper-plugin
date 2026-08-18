@@ -1,5 +1,6 @@
 // #69 工具验证矩阵：11 个 preset_*/asset_* 工具的有效性与可靠性系统化验证。
-// 有效性：工具定义齐全/结构完整/正常路径输出可 JSON 序列化且含关键字段。
+// 有效性：工具定义齐全/结构完整/正常路径输出**无损 JSON**（#101：JSON.stringify 会静默
+// 丢弃 undefined/NaN——宿主输出校验要求无损，旧"可序列化"检查抓不到该缺陷）且含关键字段。
 // 可靠性：非法参数教学错误不崩溃/幂等（apply×2、revert×2）/顺序一致性链路/
 // 删活动预设还原/空库与全量截断/损坏文件健壮性/连发 id 唯一。
 // 直调 execute（与 agent 实际执行同源代码，stub defineTool 仅跳过 schema 校验）；
@@ -37,6 +38,29 @@ for (const item of existingList.presets ?? []) {
   await fetch(`${BASE}/ui-presets/presets/${encodeURIComponent(item.id)}`, { method: 'DELETE' }).catch(() => {})
 }
 
+/** #101：无损 JSON 校验——递归查找 undefined/非有限数/循环引用（宿主输出校验同语义；
+ * JSON.stringify 会静默丢弃 undefined，必须显式遍历）。返回违规路径数组。 */
+function losslessViolations(value, path = 'value', seen = new Set()) {
+  if (value === undefined) return [`${path} = undefined`]
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') return []
+  if (typeof value === 'number') return Number.isFinite(value) ? [] : [`${path} = ${value}`]
+  if (seen.has(value)) return [`${path} = cyclic`]
+  seen.add(value)
+  if (Array.isArray(value)) {
+    const out = []
+    for (let i = 0; i < value.length; i += 1) out.push(...losslessViolations(value[i], `${path}[${i}]`, seen))
+    return out
+  }
+  const out = []
+  for (const key of Object.keys(value)) out.push(...losslessViolations(value[key], `${path}.${key}`, seen))
+  return out
+}
+const assertLossless = (name, value) => {
+  const violations = losslessViolations(value)
+  check(`无损 JSON：${name}${violations.length > 0 ? `（${violations.slice(0, 3).join('；')}…）` : ''}`,
+    violations.length === 0)
+}
+
 const stubDefineTool = def => def
 const defs = createPresetToolDefs(env, stubDefineTool)
 const byName = Object.fromEntries(defs.map(d => [d.name, d]))
@@ -59,20 +83,33 @@ check('工具定义结构完整', defs.every(d =>
   typeof d.name === 'string' && typeof d.description === 'string'
   && typeof d.execute === 'function' && typeof d.presentCall === 'function'))
 
-// 3. 正常路径输出可 JSON 序列化且含关键字段（全 11 工具）
+// 3. 正常路径输出无损 JSON 且含关键字段（全 11 工具）
 const listResult = await T('preset_list').execute({}, {})
-check('preset_list 输出可序列化且含 presets', (() => { try { JSON.stringify(listResult); return Array.isArray(listResult.presets) && listResult.presets.some(p => p.id === 'default') } catch { return false } })())
+check('preset_list 输出含 presets 与 default', Array.isArray(listResult.presets) && listResult.presets.some(p => p.id === 'default'))
+assertLossless('preset_list', listResult)
 const emptyCatalog = await T('preset_catalog').execute({}, {})
 check('preset_catalog 输出含六段结构（#73 含 styles）', Array.isArray(emptyCatalog.tokens) && Array.isArray(emptyCatalog.knobs)
   && Array.isArray(emptyCatalog.knob_categories) && Array.isArray(emptyCatalog.css_anchors)
   && Array.isArray(emptyCatalog.styles) && emptyCatalog.styles.length >= 5 && typeof emptyCatalog.matched === 'number')
+assertLossless('preset_catalog', emptyCatalog)
+// #101：可选字段只在定义时输出——color 类旋钮无 min/max/unit/options，number 类有 min/unit
+check('preset_catalog knobs 可选字段按定义输出',
+  emptyCatalog.knobs.every(k => (k.min === undefined || typeof k.min === 'number')
+    && (k.max === undefined || typeof k.max === 'number')
+    && (k.step === undefined || typeof k.step === 'number')
+    && (k.unit === undefined || typeof k.unit === 'string')
+    && (k.options === undefined || Array.isArray(k.options)))
+  && emptyCatalog.knobs.some(k => k.control === 'color' && k.min === undefined && k.options === undefined)
+  && emptyCatalog.knobs.some(k => k.control === 'number' && typeof k.min === 'number' && typeof k.unit === 'string'))
 const inspectResult = await T('preset_inspect').execute({}, {})
-// #96：无活动预设时省略 activePresetId 键（schema 无法声明 nullable）——断言必含字段与可序列化
-check('preset_inspect 输出可序列化且含活动态字段',
-  (() => { try { JSON.stringify(inspectResult); return typeof inspectResult.revision === 'number' && typeof inspectResult.tokenCount === 'number' } catch { return false } })())
+// #96：无活动预设时省略 activePresetId 键（schema 无法声明 nullable）——断言必含字段与无损
+check('preset_inspect 输出含活动态字段',
+  typeof inspectResult.revision === 'number' && typeof inspectResult.tokenCount === 'number')
+assertLossless('preset_inspect', inspectResult)
 const assetList = await T('asset_list').execute({}, {})
 check('asset_list 返回数组且条目结构完整（id/name/mime/size）',
   Array.isArray(assetList.assets) && assetList.assets.every(a => typeof a.id === 'string' && typeof a.name === 'string' && typeof a.mime === 'string' && typeof a.size === 'number'))
+assertLossless('asset_list', assetList)
 
 // ============ 可靠性 ============
 
