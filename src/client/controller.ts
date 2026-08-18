@@ -17,6 +17,7 @@ import {
   cropElementStyle,
   layeredElementStyle,
   parseCropMarkers,
+  sidebarPosterFitFor,
   type CropMarkerInfo,
 } from '../core/crop.ts'
 import { DEMO_PRESETS } from './demo.ts'
@@ -709,8 +710,12 @@ export class PresetsController {
     const crop = { x: info.x, y: info.y, w: info.w, h: info.h }
     const washToken = WIDGET_WASH_TOKEN[info.widgetId] ?? 'var(--dsw-alias-bg-base, #fff)'
     // #92：侧栏海报用 contain（实际侧栏元素 280×900 ≈ 1:3.2 远宽于 1:5 帧——
-    // cover 会把帧底部裁出可视区，海报"歪到看不见"；contain 整个帧完整可见、所见即所得）
-    const fit: 'cover' | 'contain' = info.widgetId === 'sidebar-poster' ? 'contain' : 'cover'
+    // cover 会把帧底部裁出可视区，海报"歪到看不见"；contain 整个帧完整可见、所见即所得）。
+    // #99：折叠成窄栏（≈1:14 窄于帧比例）时自适应切 cover——按高度铺满、水平裁出
+    // 海报竖条（海报随侧栏"折叠"），不再 contain 整体缩小成小图。
+    const fit: 'cover' | 'contain' = info.widgetId === 'sidebar-poster'
+      ? sidebarPosterFitFor(rect.width, rect.height, frame)
+      : 'cover'
     // #90 分层合成壁纸：标记 url 对应的素材带 layers 规格 → 渲染为"静态底 + 原生动图"多背景
     // （动图按帧坐标矩形经同变换映射；meta 未加载时先用单图样式，加载后重同步升级）
     const assetMatch = /\/ui-presets\/assets\/([a-z0-9-]+)/.exec(info.url)

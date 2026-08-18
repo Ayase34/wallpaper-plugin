@@ -155,6 +155,10 @@ function parseCropMarkers(cssText) {
   }
   return out;
 }
+function sidebarPosterFitFor(elementW, elementH, frame) {
+  if (elementW <= 0 || elementH <= 0 || frame.w <= 0 || frame.h <= 0) return "contain";
+  return elementW / elementH >= frame.w / frame.h ? "contain" : "cover";
+}
 function cropElementStyle(elementW, elementH, frame, crop, opacity, url, washToken, fit = "cover") {
   if (elementW <= 0 || elementH <= 0 || frame.w <= 0 || frame.h <= 0) return {};
   const s = fit === "contain" ? Math.min(elementW / frame.w, elementH / frame.h) : Math.max(elementW / frame.w, elementH / frame.h);
@@ -1659,7 +1663,7 @@ var PresetsController = class {
     const rect = el.getBoundingClientRect();
     const crop = { x: info.x, y: info.y, w: info.w, h: info.h };
     const washToken = WIDGET_WASH_TOKEN[info.widgetId] ?? "var(--dsw-alias-bg-base, #fff)";
-    const fit = info.widgetId === "sidebar-poster" ? "contain" : "cover";
+    const fit = info.widgetId === "sidebar-poster" ? sidebarPosterFitFor(rect.width, rect.height, frame) : "cover";
     const assetMatch = /\/ui-presets\/assets\/([a-z0-9-]+)/.exec(info.url);
     let layeredSpec;
     if (assetMatch !== null) layeredSpec = this.layersMeta.get(assetMatch[1]);

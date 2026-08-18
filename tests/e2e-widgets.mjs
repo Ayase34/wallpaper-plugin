@@ -223,6 +223,66 @@ check(`侧栏海报真实生效（w=${sidebarStyle?.w} bgImage=${sidebarStyle?.b
 check(`#92 侧栏海报 contain 可见（sizeW=${sidebarStyle?.sizeW} 不铺满、posY=${sidebarStyle?.posY} 在元素内）`,
   sidebarStyle !== null && Number.isFinite(sidebarStyle.sizeW) && sidebarStyle.sizeW < sidebarStyle.w
   && Number.isFinite(sidebarStyle.posY) && sidebarStyle.posY > 0 && sidebarStyle.posY < sidebarStyle.h)
+// #99 回归（用户 bug：侧栏折叠后海报异常缩小）：折叠成窄栏（≈1:14 窄于 1:5 帧）时
+// 自适应切 cover——按高度铺满、水平裁出竖条（"海报折叠"），不再 contain 缩成小图。
+// 期望值按标记里的裁剪矩形 + 元素实测尺寸计算（cover: s=max(w/384,h/1920)；
+// contain: s=min(w/384,h/1920) + 居中偏移 offX/offY——展开态 #92 行为不变）。
+const freshPatch = await page.evaluate(() => document.querySelector('style[data-up-patch]')?.textContent ?? '')
+const posterMarker = /up-crop:sidebar-poster:0\.3:(-?[\d.]+):(-?[\d.]+):(-?[\d.]+):(-?[\d.]+):/.exec(freshPatch)
+check('#99 侧栏海报裁剪标记可取', posterMarker !== null)
+const [cX, cY, cW, cH] = [posterMarker?.[1], posterMarker?.[2], posterMarker?.[3], posterMarker?.[4]].map(Number)
+const sidebarState = () => page.evaluate(() => {
+  const el = document.querySelector('[data-slot="sidebar"] > div:first-child')
+  if (el === null) return null
+  const cs = getComputedStyle(el)
+  const rect = el.getBoundingClientRect()
+  const size = (cs.backgroundSize.split(', ')[1] ?? cs.backgroundSize).split(' ')
+  const pos = (cs.backgroundPosition.split(', ')[1] ?? cs.backgroundPosition).split(' ')
+  return {
+    w: rect.width, h: rect.height,
+    sizeW: parseFloat(size[0] ?? '0'), sizeH: parseFloat(size[1] ?? '0'),
+    posX: parseFloat(pos[0] ?? '0'), posY: parseFloat(pos[1] ?? '0'),
+  }
+})
+// 折叠：元素宽压到 64px → ResizeObserver 重算 → 自适应 cover
+await page.evaluate(() => {
+  const el = document.querySelector('[data-slot="sidebar"] > div:first-child')
+  if (el !== null) el.style.width = '64px'
+})
+await page.waitForFunction(([cW, cH]) => {
+  const el = document.querySelector('[data-slot="sidebar"] > div:first-child')
+  if (el === null) return false
+  const cs = getComputedStyle(el)
+  const rect = el.getBoundingClientRect()
+  if (Math.abs(rect.width - 64) > 2) return false
+  const s = Math.max(64 / 384, rect.height / 1920)
+  const sizeH = parseFloat((cs.backgroundSize.split(', ')[1] ?? cs.backgroundSize).split(' ')[1] ?? '0')
+  return Math.abs(sizeH - cH * s) < 2 // cover 缩放已应用
+}, [cW, cH], { timeout: 15000 }).catch(() => {})
+const collapsed = await sidebarState()
+const sCover = Math.max(64 / 384, collapsed.h / 1920)
+const sShrink = Math.min(64 / 384, collapsed.h / 1920)
+check(`#99 折叠后海报按 cover 铺高（sizeH=${collapsed.sizeH} ≈ ${(cH * sCover).toFixed(1)}；旧 bug 缩小值=${(cH * sShrink).toFixed(1)}）`,
+  collapsed !== null && near(collapsed.sizeH, cH * sCover) && collapsed.sizeH > cH * sShrink + 1)
+// 展开还原 → contain 恢复（#92 行为：整幅可见、居中偏移）
+await page.evaluate(() => {
+  const el = document.querySelector('[data-slot="sidebar"] > div:first-child')
+  if (el !== null) el.style.width = ''
+})
+await page.waitForFunction(([cX, cW, cH]) => {
+  const el = document.querySelector('[data-slot="sidebar"] > div:first-child')
+  if (el === null) return false
+  const cs = getComputedStyle(el)
+  const rect = el.getBoundingClientRect()
+  const s = Math.min(rect.width / 384, rect.height / 1920)
+  const offX = (rect.width - 384 * s) / 2
+  const posX = parseFloat((cs.backgroundPosition.split(', ')[1] ?? cs.backgroundPosition).split(' ')[0] ?? '0')
+  return Math.abs(posX - (offX + cX * s)) < 2 // contain 居中偏移已恢复
+}, [cX, cW, cH], { timeout: 15000 }).catch(() => {})
+const restored = await sidebarState()
+const sRestore = Math.min(restored.w / 384, restored.h / 1920)
+check(`#99 展开还原 contain 恢复（sizeH=${restored.sizeH} ≈ ${(cH * sRestore).toFixed(1)}、posY=${restored.posY} 在元素内）`,
+  restored !== null && near(restored.sizeH, cH * sRestore) && restored.posY > -0.5 && restored.posY < restored.h)
 // #91 回归（用户实测：预览里摆好的小图应用后被 cover 铺满全屏——opacity=100% 无 wash 层时
 // background-size 曾输出 `cover, px…` 双值而背景只有 1 层 → CSS 按层取第一个值，图片被 cover 吞掉；
 // 只有 opacity<1 带 wash 层时双值才碰巧正确）：

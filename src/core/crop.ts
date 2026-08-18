@@ -148,6 +148,19 @@ export function parseCropMarkers(cssText: string): CropMarkerInfo[] {
   return out
 }
 
+/** #99：侧栏海报自适应 fit——元素宽高比 ≥ 帧宽高比（展开侧栏 ≈280×900 宽于 1:5 帧）
+ * → contain（整幅海报完整可见，#92 行为不变）；元素窄于帧比例（侧栏折叠成窄栏，
+ * 如 64×900 ≈ 1:14）→ cover（按高度铺满、水平裁出海报竖条——海报随侧栏"折叠"成条，
+ * 不再 contain 整体缩小成小图）。比例相等时两者等价，取 contain。 */
+export function sidebarPosterFitFor(
+  elementW: number,
+  elementH: number,
+  frame: { w: number; h: number },
+): 'cover' | 'contain' {
+  if (elementW <= 0 || elementH <= 0 || frame.w <= 0 || frame.h <= 0) return 'contain'
+  return elementW / elementH >= frame.w / frame.h ? 'contain' : 'cover'
+}
+
 /**
  * 裁剪元素的动态内联样式（纯函数可单测）——按目标元素**实际尺寸**计算：
  * 元素显示"裁剪帧内容"整体（帧按 s 缩放铺进元素），图片在帧内的绘制矩形同步缩放定位；

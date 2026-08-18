@@ -13,6 +13,7 @@ import {
   parseCropMarkers,
   cropElementStyle,
   layeredElementStyle,
+  sidebarPosterFitFor,
   CROP_ZOOM_MIN,
   CROP_ZOOM_MAX,
 } from '../src/core/crop.ts'
@@ -195,4 +196,18 @@ test('#92 侧栏海报 contain 映射：整个帧完整可见（元素 280×900 
   const layered = layeredElementStyle(280, 900, frame, { x: 0, y: 1439.9, w: 384, h: 960.2 }, 1,
     'url("/base")', 'url("/anim")', { x: 10, y: 50, w: 100, h: 80 }, 'w', 'contain')
   assert.equal(layered.backgroundPosition, '50px 674.953125px, 54.6875px 698.390625px')
+})
+
+test('#99 sidebarPosterFitFor：侧栏折叠自适应——宽于帧比例 contain（整幅），窄于帧比例 cover（竖条）', () => {
+  const frame = { w: 384, h: 1920 } // 1:5
+  // 展开侧栏 280×900 ≈ 1:3.2 ≥ 1:5 → contain（#92 行为不变）
+  assert.equal(sidebarPosterFitFor(280, 900, frame), 'contain')
+  // 折叠窄栏 64×900 ≈ 1:14 < 1:5 → cover（海报"折叠"成竖条，不再缩小）
+  assert.equal(sidebarPosterFitFor(64, 900, frame), 'cover')
+  assert.equal(sidebarPosterFitFor(80, 900, frame), 'cover')
+  // 比例相等 → contain（等价，取 contain）
+  assert.equal(sidebarPosterFitFor(384, 1920, frame), 'contain')
+  // 兜底：尺寸未知 → contain（cropElementStyle 空样式由调用方清除）
+  assert.equal(sidebarPosterFitFor(0, 900, frame), 'contain')
+  assert.equal(sidebarPosterFitFor(280, 900, { w: 0, h: 0 }), 'contain')
 })
