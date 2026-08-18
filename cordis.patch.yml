@@ -1,0 +1,5 @@
+# wallpaper-plugin bundle patch：向组合插入 wallpaper-plugin 行（Node half 提供预设库/壁纸 API，client half 注册设置入口与工作室）。
+# 恢复预案：在 profile 的 cordis.patch.yml 加 `- id: wallpaper-plugin` + `disabled: true` 即可隔离本插件。
+- insert:
+    - id: wallpaper-plugin
+      name: wallpaper-plugin

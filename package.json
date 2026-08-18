@@ -1,0 +1,40 @@
+{
+  "name": "wallpaper-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DSH 壁纸插件：预设/主题管理 + 壁纸素材库 + 图层合成（#95 正式版，前身 ui-presets）",
+  "main": "./.dsh-plugin/index.mjs",
+  "exports": {
+    ".": "./.dsh-plugin/index.mjs",
+    "./client": "./.dsh-plugin/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "slots",
+        "theme"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check:client": "node scripts/build.mjs --check",
+    "selfcheck": "node scripts/selfcheck.mjs",
+    "gen:catalog": "node scripts/gen-catalog.mjs",
+    "test": "node scripts/build.mjs && node scripts/run-unit.mjs"
+  },
+  "engines": {
+    "node": ">=20.11"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  },
+  "license": "MIT"
+}

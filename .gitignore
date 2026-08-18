@@ -1,0 +1,13 @@
+# ---- 依赖与构建产物（npm run build 生成；运行时经 profile 链接需要本地构建产物） ----
+node_modules/
+lib/
+.dsh-plugin/
+
+# ---- 测试临时日志（可重新生成） ----
+.regression-last.txt
+.perf-history.json
+
+# ---- 原子写临时文件与编辑器/系统 ----
+*.tmp
+.DS_Store
+Thumbs.db

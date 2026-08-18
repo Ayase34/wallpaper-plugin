@@ -1,0 +1,115 @@
+/**
+ * 令牌中文语义（#74）：组级说明 + 高频令牌中文描述——UI 表单展示（用户可自行
+ * 「添加描述」覆盖）与 AI 工具 preset_catalog 输出共用（双代理评估点名的
+ * "catalog description 全空"落地第一层；用户自填层在 localStorage）。
+ * 覆盖面：alias 主要组 + specific 全部 + 常用 static/scrollbar——"用户会改的"
+ * 高频面；其余令牌在 UI 按组级说明兜底（组说明对全部组提供）。
+ */
+export const GROUP_DESCRIPTIONS: Record<string, string> = {
+  'alias-bg': '界面底色与层次（最常改的组）',
+  'alias-border': '边框与分隔线颜色',
+  'alias-brand': '品牌主色（强调色体系）',
+  'alias-label': '文字颜色（主/次/辅助三级）',
+  'alias-button': '按钮颜色（填充/悬停）',
+  'alias-interactive': '交互态（悬停/激活背景）',
+  'alias-state': '状态色（成功/错误/警告）',
+  'alias-markdown': '富文本/代码块颜色',
+  'alias-overlay': '弹层/提示浮层',
+  'alias-scrollbar': '滚动条颜色',
+  specific: '界面组件专属色（气泡/侧栏/输入框）',
+  font: '字体排印（一般不用改）',
+  shadow: '阴影（一般不用改）',
+  gradient: '渐变（一般不用改）',
+  shiki: '代码高亮配色',
+  scrollbar: '滚动条（宿主级）',
+  static: '静态色板（底层引用，谨慎）',
+  other: '其他',
+}
+
+export const TOKEN_DESCRIPTIONS: Record<string, string> = {
+  // —— 背景层次 ——
+  '--dsw-alias-bg-base': '整个界面的底色（改这个 = 整体换肤）',
+  '--dsw-alias-bg-layer-1': '卡片/输入框/弹层的浮出色',
+  '--dsw-alias-bg-layer-2': '更高一层的浮出色（设置面板等）',
+  '--dsw-alias-bg-layer-3': '再高一层的浮出色',
+  '--dsw-alias-bg-mask-1': '遮罩层颜色（弹窗背后的压暗）',
+  '--dsw-alias-bg-mask-2': '浅遮罩',
+  '--dsw-alias-bg-mask-3': '深遮罩',
+  '--dsw-alias-bg-overlay': '浮层底色（下拉/选择器）',
+  '--dsw-alias-bg-skeleton': '骨架屏占位色',
+  '--dsw-alias-bg-module-platform': '平台模块背景',
+  '--dsw-alias-bg-multi-select': '多选控件背景',
+  '--dsw-alias-bg-mask-photo': '图片上文字的背景压暗',
+  '--dsw-alias-bg-mask-drop': '拖拽落区遮罩',
+  // —— 品牌 ——
+  '--dsw-alias-brand-primary': '品牌主色（按钮/链接/强调，换肤核心）',
+  '--dsw-alias-brand-text': '品牌色上的文字',
+  '--dsw-alias-brand-primary-invert': '品牌色的反色变体',
+  // —— 文字 ——
+  '--dsw-alias-label-primary': '主文字颜色（正文）',
+  '--dsw-alias-label-secondary': '次要文字（说明/标题）',
+  '--dsw-alias-label-tertiary': '辅助文字（时间戳/占位）',
+  '--dsw-alias-label-dimmed': '弱化文字',
+  '--dsw-alias-label-caption': '小标题文字',
+  '--dsw-alias-label-primary-foreground': '主色按钮上的文字颜色',
+  '--dsw-alias-label-primary-inverted': '反色场景的主文字',
+  '--dsw-alias-state-warn-label': '警告文字颜色',
+  // —— 按钮 ——
+  '--dsw-alias-button-primary-fill': '主按钮填充（通常=品牌色）',
+  '--dsw-alias-button-primary-hover': '主按钮悬停色',
+  '--dsw-alias-button-primary-dimmed': '主按钮弱化态',
+  '--dsw-alias-button-info-fill': '信息按钮填充（通常=品牌色）',
+  '--dsw-alias-button-info-hover': '信息按钮悬停色',
+  '--dsw-alias-button-floating-fill': '悬浮按钮填充',
+  '--dsw-alias-button-floating-hover': '悬浮按钮悬停色',
+  '--dsw-alias-button-contrast-fill': '对比按钮填充',
+  '--dsw-alias-button-elevated-fill': '凸起按钮填充',
+  '--dsw-alias-button-ghost-active-fill': '幽灵按钮激活背景',
+  '--dsw-alias-button-ghost-active-hover': '幽灵按钮激活悬停',
+  '--dsw-alias-button-ghost-active-border': '幽灵按钮激活边框',
+  '--dsw-alias-button-tool-bar-fill': '工具栏按钮填充',
+  '--dsw-alias-button-tool-bar-hover': '工具栏按钮悬停',
+  // —— 交互态 ——
+  '--dsw-alias-interactive-bg-hover': '列表/菜单项悬停背景',
+  '--dsw-alias-interactive-bg-active': '列表/菜单项激活背景',
+  '--dsw-alias-interactive-bg-hover-accent': '强调悬停背景',
+  '--dsw-alias-interactive-bg-hover-danger': '危险悬停背景',
+  '--dsw-alias-interactive-bg-hover-solid': '实心悬停背景',
+  // —— 状态 ——
+  '--dsw-alias-state-success-primary': '成功状态色',
+  '--dsw-alias-state-error-primary': '错误状态色',
+  '--dsw-alias-state-warn-primary': '警告状态色',
+  '--dsw-alias-state-warn-secondary': '警告次要色',
+  '--dsw-alias-state-business-primary': '业务强调色（通常=品牌色）',
+  // —— 边框 ——
+  '--dsw-alias-border-l1': '最淡分隔线',
+  '--dsw-alias-border-l2': '常规边框/分隔线',
+  '--dsw-alias-border-l3': '较深边框',
+  '--dsw-alias-border-l4': '最深边框（输入框聚焦等）',
+  '--dsw-alias-border-inverted': '反色场景边框',
+  // —— 组件专属（specific）——
+  '--dsw-specific-sidebar-fill': '侧边栏背景（换肤常改）',
+  '--dsw-specific-sidebar-nav-item-active': '侧栏选中项背景',
+  '--dsw-specific-sidebar-nav-item-active-accent': '侧栏选中项强调条',
+  '--dsw-specific-bubble': '对话气泡背景',
+  '--dsw-specific-bubble-highlight': '高亮气泡背景',
+  '--dsw-specific-input-major': '底部输入框背景',
+  '--dsw-specific-menu': '菜单/下拉背景',
+  '--dsw-specific-tip': '提示气泡背景',
+  '--dsw-specific-selector': '选择器背景',
+  '--dsw-alias-toast-bg': 'toast 提示背景',
+  '--dsw-alias-tooltip-bg': '工具提示背景',
+  // —— 滚动条 / 常用 static ——
+  '--dsw-alias-scrollbar-bg-l1': '滚动条轨道',
+  '--dsw-alias-scrollbar-hover-l1': '滚动条悬停',
+  '--dsw-alias-scrollbar-bg-l2': '滚动条轨道（深）',
+  '--dsw-alias-scrollbar-hover-l2': '滚动条悬停（深）',
+  '--dsh-scrollbar-width': '滚动条宽度',
+  '--dsh-scrollbar-thumb': '滚动条滑块',
+  '--dsh-scrollbar-thumb-hover': '滚动条滑块悬停',
+  // —— 富文本 / 代码 ——
+  '--dsw-alias-markdown-code-block': '代码块背景',
+  '--dsw-alias-markdown-inline-code': '行内代码背景',
+  '--dsw-alias-markdown-citation': '引用背景',
+  '--dsw-alias-markdown-tag': '标签背景',
+}

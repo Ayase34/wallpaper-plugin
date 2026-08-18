@@ -1,0 +1,6 @@
+# pnpm 设置（pnpm 11：package.json 的 "pnpm" 字段已废弃，设置迁移至此文件）
+# esbuild 的 postinstall 显式忽略：postinstall 只做二进制"校验"，运行时 esbuild JS 封装
+# 直接使用可选依赖 @esbuild/win32-x64 提供的二进制，无需 postinstall。
+# 显式声明（而非缺省拦截）可避免 pnpm 报 ERR_PNPM_IGNORED_BUILDS 使 install 整体失败。
+allowBuilds:
+  esbuild: false
