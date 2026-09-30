@@ -154,8 +154,17 @@ function writeChecked(output, content, check) {
 }
 
 const check = process.argv.includes('--check')
+// --check:client：只核对 client 产物（node half 需要原 checkout 的 vendor 源码，
+// checkout 缺失时无法逐字节复现——浏览器端改动只需核对 client.js）。
+const checkClientOnly = process.argv.includes('--check:client')
 mkdirSync(join(ROOT, 'lib'), { recursive: true })
 mkdirSync(join(ROOT, '.dsh-plugin'), { recursive: true })
+if (checkClientOnly) {
+  const clientOnly = buildClient()
+  assertNoNodeGlobals(clientOnly.toString('utf8'), '.dsh-plugin/client.js')
+  writeChecked(CLIENT_OUTPUT, clientOnly, true)
+  process.exit(0)
+}
 const coreText = buildCore()
 const nodeText = buildNode()
 const clientText = buildClient()

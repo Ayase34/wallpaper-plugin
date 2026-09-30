@@ -5436,7 +5436,16 @@ var CSS = `
 [data-up-btn-primary] { background: var(--dsw-alias-button-info-fill, #416fe6); border-color: transparent; color: #fff; }
 [data-up-status] { font-size: 12px; color: var(--dsw-alias-label-tertiary, #999); min-height: 16px; }
 [data-up-error] { color: var(--dsw-alias-state-error-primary, #d94c4c); font-size: 12px; }
-[data-up-studio] { position: fixed; inset: 0; z-index: 1200; background: var(--dsw-alias-bg-base, #fff); color: var(--dsw-alias-label-primary, #111); display: flex; flex-direction: column; }
+/* #107\uFF08\u684C\u9762\u7AEF\u6309\u94AE\u6B8B\u7559\u4FEE\u590D\uFF09\uFF1A\u5DE5\u4F5C\u5BA4\u5168\u5C4F\u5C42\u5FC5\u987B\u8BA9\u5F00\u684C\u9762\u58F3\u7684\u539F\u751F\u6807\u9898\u680F\u6761\u5E26\u3002
+   DSH Desktop\uFF08Windows\uFF09\u7528\u300C\u8986\u76D6\u5F0F\u6807\u9898\u680F\u300D\u2014\u2014preload \u5728 <html> \u5199 --dsh-windows-titlebar-height: 40px\uFF0C
+   \u5E94\u7528\u81EA\u8EAB\u5E03\u5C40\u628A --dsh-frame-top-clearance \u8BBE\u4E3A\u8BE5\u9AD8\u5EA6\u5E76\u7528\u5B83\u7ED9 frame \u52A0 padding-top\uFF1B
+   \u5E26 --dsh-frame-chrome-top / --dsh-frame-overlay-top \u7684\u6D6E\u5C42\u540C\u6837\u636E\u6B64\u4E0B\u79FB\u3002
+   \u5DE5\u4F5C\u5BA4\u5C42\u539F\u5148 inset:0 \u76F4\u8D34\u9876\u7AEF\uFF1A\u5176\u9876\u680F\uFF08\u2039\u8FD4\u56DE / \u6807\u9898 / \u6D3B\u52A8 / \u5BFC\u51FA ZIP / \u653E\u5F03 / \u4FDD\u5B58\uFF09
+   \u6B63\u597D\u843D\u5728\u6807\u9898\u680F\u6761\u5E26\u91CC\uFF0C\u4E0E\u58F3\u5185\u5DE6\u4E0A\u89D2\u7684 Windows \u6807\u9898\u680F\u83DC\u5355\uFF08\u5E94\u7528 / \u7F16\u8F91\uFF0Cz-index:1100\uFF0C
+   height: var(--dsh-windows-titlebar-height)\uFF09\u91CD\u53E0\u2014\u2014\u7528\u6237\u770B\u5230\u300C\u4E4B\u524D\u9875\u9762\u7684\u6309\u94AE\u6B8B\u7559\u300D\u3002
+   \u4FEE\u6CD5\uFF1A\u6839\u5143\u7D20\u52A0 padding-top = \u6846\u67B6\u9876\u90E8\u8BA9\u4F4D\uFF08\u7F51\u9875\u7AEF\u4E3A 0\uFF0C\u96F6\u5F71\u54CD\uFF09\uFF0C
+   box-sizing: border-box \u4FDD\u8BC1\u4ECD\u94FA\u6EE1\u89C6\u53E3\u3001\u80CC\u666F\u4ECD\u76D6\u4F4F\u6574\u5C4F\u3002 */
+[data-up-studio] { box-sizing: border-box; position: fixed; inset: 0; z-index: 1200; padding-top: var(--dsh-frame-top-clearance, 0px); background: var(--dsw-alias-bg-base, #fff); color: var(--dsw-alias-label-primary, #111); display: flex; flex-direction: column; }
 [data-up-studio-bar] { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--dsw-alias-border-l2, #ddd); }
 [data-up-studio-title] { font-size: 15px; font-weight: 600; flex: 1; }
 [data-up-studio-body] { flex: 1; overflow: auto; padding: 24px; }

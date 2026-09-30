@@ -85,7 +85,16 @@ const CSS = `
 [data-up-btn-primary] { background: var(--dsw-alias-button-info-fill, #416fe6); border-color: transparent; color: #fff; }
 [data-up-status] { font-size: 12px; color: var(--dsw-alias-label-tertiary, #999); min-height: 16px; }
 [data-up-error] { color: var(--dsw-alias-state-error-primary, #d94c4c); font-size: 12px; }
-[data-up-studio] { position: fixed; inset: 0; z-index: 1200; background: var(--dsw-alias-bg-base, #fff); color: var(--dsw-alias-label-primary, #111); display: flex; flex-direction: column; }
+/* #107（桌面端按钮残留修复）：工作室全屏层必须让开桌面壳的原生标题栏条带。
+   DSH Desktop（Windows）用「覆盖式标题栏」——preload 在 <html> 写 --dsh-windows-titlebar-height: 40px，
+   应用自身布局把 --dsh-frame-top-clearance 设为该高度并用它给 frame 加 padding-top；
+   带 --dsh-frame-chrome-top / --dsh-frame-overlay-top 的浮层同样据此下移。
+   工作室层原先 inset:0 直贴顶端：其顶栏（‹返回 / 标题 / 活动 / 导出 ZIP / 放弃 / 保存）
+   正好落在标题栏条带里，与壳内左上角的 Windows 标题栏菜单（应用 / 编辑，z-index:1100，
+   height: var(--dsh-windows-titlebar-height)）重叠——用户看到「之前页面的按钮残留」。
+   修法：根元素加 padding-top = 框架顶部让位（网页端为 0，零影响），
+   box-sizing: border-box 保证仍铺满视口、背景仍盖住整屏。 */
+[data-up-studio] { box-sizing: border-box; position: fixed; inset: 0; z-index: 1200; padding-top: var(--dsh-frame-top-clearance, 0px); background: var(--dsw-alias-bg-base, #fff); color: var(--dsw-alias-label-primary, #111); display: flex; flex-direction: column; }
 [data-up-studio-bar] { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--dsw-alias-border-l2, #ddd); }
 [data-up-studio-title] { font-size: 15px; font-weight: 600; flex: 1; }
 [data-up-studio-body] { flex: 1; overflow: auto; padding: 24px; }
