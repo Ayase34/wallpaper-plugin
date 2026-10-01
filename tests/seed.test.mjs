@@ -58,15 +58,32 @@ test('#108 全新环境：三张壁纸落库 + 写入 default 预设 + 自动应
   assert.equal(validatePreset(preset).ok, true)
 })
 
-test('#108 库中已有同名「默认」→ 整轮跳过（绝不覆盖用户的编辑）', () => {
+test('#108 库中已有同名「默认」→ 不写预设（保留用户版本），但素材仍会修补', () => {
   const existing = { schemaVersion: 1, id: 'default', name: '我改过的默认', edition: 'standard', tokens: {} }
   const { state, port } = memoryPort({ presets: { default: existing }, activePresetId: 'default' })
   const result = seedBuiltinPreset(port, fakeAssets(), fakeHash)
   assert.equal(result.seeded, false)
-  assert.ok((result.skippedReason ?? '').includes('跳过播种'))
+  assert.ok((result.skippedReason ?? '').includes('保留用户版本'))
   assert.equal(state.presets.get('default'), existing, '原预设对象必须原样保留')
-  assert.equal(state.assetWrites.length, 0, '跳过时不应写任何素材')
-  assert.equal(state.activeWrites.length, 0, '跳过时不应改活动预设')
+  assert.equal(state.activeWrites.length, 0, '不抢用户的活动预设')
+  // #109：素材与预设解耦——缺失的内置素材要补齐，否则老用户永远拿不到修好的图
+  assert.deepEqual(result.assetsWritten.sort(), ['asset-dsnm-chat', 'asset-dsnm-settings', 'asset-dsnm-sidebar'])
+})
+
+test('#109 老用户升级：素材内容变了 → 预设已存在也会更新素材', () => {
+  const existing = { schemaVersion: 1, id: 'default', name: '默认', edition: 'standard', tokens: {} }
+  const { state, port } = memoryPort({
+    presets: { default: existing },
+    assets: {
+      // 旧版聊天背景（透明区被压成黑块）的尺寸/哈希
+      'asset-dsnm-chat': { id: 'asset-dsnm-chat', name: '旧', mime: 'image/jpeg', size: 333616, sha256: 'len-333616' },
+    },
+    activePresetId: 'default',
+  })
+  const result = seedBuiltinPreset(port, fakeAssets(), fakeHash)
+  assert.ok(result.assetsWritten.includes('asset-dsnm-chat'), '内容变了应更新')
+  assert.equal(state.assets.get('asset-dsnm-chat').size, 4, 'meta 应刷新为新尺寸')
+  assert.equal(result.seeded, false, '预设仍保留用户版本')
 })
 
 test('#108 幂等：素材已存在且内容一致 → 不重写；预设仍会补齐', () => {

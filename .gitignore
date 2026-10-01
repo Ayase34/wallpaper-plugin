@@ -9,6 +9,9 @@ node_modules/
 .regression-last.txt
 .perf-history.json
 
+# ---- 出厂素材生成中间产物（gen-builtin-assets 的 JPEG 暂存目录） ----
+src/builtin-src/.work/
+
 # ---- 原子写临时文件与编辑器/系统 ----
 *.tmp
 .DS_Store

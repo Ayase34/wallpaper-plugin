@@ -72,7 +72,15 @@ export interface SeedResult {
 const WIDGETS: Array<{ id: string; params: Record<string, string> }> = [
   {
     id: 'chat-background',
-    params: { assetId: 'asset-dsnm-chat', opacity: '0.4', cropX: '-47.5', cropY: '-27', cropW: '2014.9', cropH: '1134' },
+    // #109：聊天背景源图是透明底——浅/深各压一版底图，避免透明区在 JPEG 里被压成黑块
+    params: {
+      assetId: 'asset-dsnm-chat',
+      opacity: '0.4',
+      cropX: '-47.5', cropY: '-27', cropW: '2014.9', cropH: '1134',
+      assetIdDark: 'asset-dsnm-chat-dark',
+      opacityDark: '0.4',
+      cropXDark: '-47.5', cropYDark: '-27', cropWDark: '2014.9', cropHDark: '1134',
+    },
   },
   {
     id: 'settings-background',
@@ -115,12 +123,8 @@ export function seedBuiltinPreset(
   sha256: (bytes: Uint8Array) => string,
 ): SeedResult {
   const result: SeedResult = { seeded: false, assetsWritten: [], assetsKept: [], activated: false }
-  // 用户改过的同名预设优先——绝不覆盖（要恢复出厂外观可先删掉它再重启）
-  if (port.hasPreset(BUILTIN_PRESET_ID)) {
-    result.skippedReason = `库中已有同名预设「${BUILTIN_PRESET_ID}」，跳过播种`
-    return result
-  }
-  // 素材：内容一致则跳过重写；缺失/被删则补回
+  // 素材：按内容哈希逐张核对——内容变了（本插件修图/换图）会更新，一致则跳过重写，被删则补回。
+  // 注意：素材刷新与「预设是否已存在」无关——否则老用户永远拿不到修好的图（#109 实测踩到）。
   for (const asset of assets) {
     const hash = sha256(asset.bytes)
     const existing = port.readAssetMeta(asset.id)
@@ -130,6 +134,11 @@ export function seedBuiltinPreset(
     }
     port.writeAsset(asset, hash)
     result.assetsWritten.push(asset.id)
+  }
+  // 预设：库中已有同名 id（用户改过的「默认」）→ 不写、不覆盖，仅完成素材修补
+  if (port.hasPreset(BUILTIN_PRESET_ID)) {
+    result.skippedReason = `库中已有同名预设「${BUILTIN_PRESET_ID}」，保留用户版本`
+    return result
   }
   const preset = buildBuiltinPreset(assets)
   const validated = validatePreset(preset)
