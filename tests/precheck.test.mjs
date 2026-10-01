@@ -181,3 +181,37 @@ test('#73/#82 出厂预设矩阵全净：全部 demo 对比度警告归零（#82
     assert.equal(result.ok, true, `${demo.id} 结构应通过`)
   }
 })
+
+// #107：填充面「底色 vs 字色」撞车（用户实测：提问卡推荐徽标变成实心方块）
+test('#107 徽标底色与字色同色 → 警告（文字隐形）', () => {
+  const result = precheckPreset({
+    '--dsw-alias-bg-base': { light: '#c6b1e8', dark: '#150a22' },
+    '--dsw-alias-label-primary': { light: '#120823', dark: '#f3ecff' },
+    '--dsw-alias-button-info-fill': { light: '#3e1780', dark: '#7c3aed' },
+    '--dsw-specific-sidebar-nav-item-active-accent': { light: '#3e1780', dark: '#c4b5fd' },
+  })
+  const hit = result.issues.find(i => i.message.includes('推荐徽标'))
+  assert.ok(hit !== undefined, `应有推荐徽标撞色警告：${result.issues.map(i => i.message).join(' | ')}`)
+  assert.equal(hit.severity, 'warn', '对比度是建议不是阻断')
+  assert.equal(hit.scheme, 'light', '浅色两令牌同色即为问题侧')
+  assert.ok(hit.message.includes('同色'), hit.message)
+})
+
+test('#107 徽标底色/字色拉开明暗 → 无警告', () => {
+  const result = precheckPreset({
+    '--dsw-alias-bg-base': { light: '#c6b1e8', dark: '#150a22' },
+    '--dsw-alias-label-primary': { light: '#120823', dark: '#f3ecff' },
+    '--dsw-alias-button-info-fill': { light: '#3e1780', dark: '#7c3aed' },
+    '--dsw-specific-sidebar-nav-item-active-accent': { light: '#ece2fa', dark: '#ece2fa' },
+  })
+  assert.equal(result.issues.filter(i => i.message.includes('推荐徽标')).length, 0)
+})
+
+test('#107 未触碰成对令牌 → 不打扰（两侧都取目录默认时不报）', () => {
+  const result = precheckPreset({
+    '--dsw-alias-bg-base': { light: '#ffffff', dark: '#0d121b' },
+    '--dsw-alias-label-primary': { light: '#111111', dark: '#eeeeee' },
+  })
+  assert.equal(result.issues.filter(i => i.message.includes('推荐徽标')).length, 0)
+})
+

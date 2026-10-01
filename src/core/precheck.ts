@@ -52,6 +52,22 @@ const BUTTON_PAIRS: Array<{ bg: string; label: string }> = [
   { bg: '--dsw-alias-state-business-primary', label: '业务状态' },
 ]
 
+/**
+ * #107 徽标/填充面「底色 vs 字色」矩阵（宿主自带样式里，这些成对令牌分别充当背景与文字）。
+ * 实证来源：`@deepseek-ai/dsh-client-ui-user-questions` 的推荐徽标
+ * `.badge { background: var(--dsw-specific-sidebar-nav-item-active-accent);
+ *          color: var(--dsw-alias-button-info-fill) }`
+ * ——两个令牌都常被预设改写成同一个品牌色，于是徽标变成「深色实心方块」（用户实测 1.0:1）。
+ * 徽标是 11px 加粗小字 → 按文本标准 4.5:1 校验（大文本放宽到 3:1）。
+ */
+const FILLED_SURFACE_PAIRS: Array<{ fill: string; ink: string; label: string; threshold: 'text' | 'component' }> = [
+  { fill: '--dsw-specific-sidebar-nav-item-active-accent', ink: '--dsw-alias-button-info-fill', label: '推荐徽标（提问卡）', threshold: 'text' },
+  { fill: '--dsw-alias-button-info-fill', ink: '--dsw-alias-label-primary-foreground', label: '信息按钮', threshold: 'component' },
+  { fill: '--dsw-alias-button-primary-fill', ink: '--dsw-alias-label-primary-foreground', label: '主按钮', threshold: 'component' },
+  { fill: '--dsw-alias-state-business-primary', ink: '--dsw-alias-label-primary-foreground', label: '业务状态标记', threshold: 'component' },
+  { fill: '--dsw-alias-toast-bg', ink: '--dsw-alias-toast-label', label: '轻提示（toast）', threshold: 'text' },
+]
+
 /** 目录外令牌豁免前缀（--dsh- 与 --ds- 宿主扩展，audit 同款）。 */
 const KNOWN_PREFIXES = ['--dsh-', '--ds-']
 
@@ -180,6 +196,31 @@ export function precheckPreset(
   }
   for (const pair of TEXT_PAIRS) checkPair(pair.fg, pair.bg, pair.label, 'text')
   for (const pair of BUTTON_PAIRS) checkPair('--dsw-alias-label-primary-foreground', pair.bg, pair.label, 'component')
+
+  // #107：填充面「底色 vs 字色」矩阵——专治徽标/按钮这类成对令牌被改成同色（文字隐形）。
+  // 仅当至少一个令牌由候选提供时才报（两侧都取目录默认的撞色属宿主目录自身问题，不打扰用户）。
+  for (const pair of FILLED_SURFACE_PAIRS) {
+    const touched = pairs[pair.fill] !== undefined || pairs[pair.ink] !== undefined
+    if (!touched) continue
+    for (const scheme of ['light', 'dark'] as const) {
+      const fill = resolveColor(pair.fill, scheme, pairs)
+      const ink = resolveColor(pair.ink, scheme, pairs)
+      const result = fill.color !== '' && ink.color !== '' ? contrastForValues(ink.color, fill.color) : null
+      if (result === null) continue
+      const limit = pair.threshold === 'text' ? 4.5 : 3
+      if (result.ratio >= limit) continue
+      contrastIssues += 1
+      const sameColor = result.ratio < 1.05
+      issues.push({
+        token: pair.ink, scheme, severity: 'warn',
+        message: `${pair.label}：底色与文字同色（${fill.color} / ${ink.color}）
+（对比度 ${result.ratio.toFixed(1)}:1 < ${limit}:1）——`
+          + (sameColor
+            ? '文字会完全看不见；请把两者之一改成可区分的明暗（如底色改浅、文字保持深色）'
+            : '文字可读性不足；建议调整到 ≥ ' + limit + ':1'),
+      })
+    }
+  }
 
   // #73：明暗护栏——bg-base light 比 dark 更暗 → 明暗反转警告
   const bgLight = resolveColor('--dsw-alias-bg-base', 'light', pairs)
