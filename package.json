@@ -26,9 +26,10 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "check:client": "node scripts/build.mjs --check",
+    "check:client": "node scripts/build.mjs --check:client",
     "selfcheck": "node scripts/selfcheck.mjs",
     "gen:catalog": "node scripts/gen-catalog.mjs",
+    "gen:builtin-assets": "node scripts/gen-builtin-assets.mjs",
     "test": "node scripts/build.mjs && node scripts/run-unit.mjs"
   },
   "engines": {

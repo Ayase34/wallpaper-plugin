@@ -6,8 +6,34 @@
  * 同 id，列表去重只显示一张「默认」卡片；用户环境由库预设提供（含壁纸三件套），
  * 全新安装由本出厂预设兜底（令牌同款海洋风格）。预检矩阵全净
  * （preset_check：15 令牌 0 提示，label 家族 AA + 按钮 3:1 明暗各算）。
+ * #108：令牌集独立导出（DEMO_DEFAULT_TOKENS），node half 播种「带壁纸的默认」时复用
+ * 同一套色调（避免两处各写一份漂移）；出厂兜底仍是不含素材的纯令牌版本（浏览器包零图像负载）。
  */
 import type { Preset } from './schema.ts'
+
+/** 出厂预设「默认」的令牌集（#108：出厂兜底与库内播种版共用，单一事实源）。 */
+export const DEMO_DEFAULT_TOKENS: Record<string, { light: string; dark: string }> = {
+  '--dsw-alias-bg-base': { light: 'rgb(240, 248, 255)', dark: 'rgb(6, 14, 30)' },
+  '--dsw-alias-bg-layer-1': { light: 'rgb(255, 255, 255)', dark: 'rgb(12, 22, 42)' },
+  '--dsw-alias-bg-layer-2': { light: 'rgb(226, 241, 255)', dark: 'rgb(18, 32, 58)' },
+  '--dsw-specific-sidebar-fill': { light: 'rgb(230, 243, 255)', dark: 'rgb(4, 10, 24)' },
+  '--dsw-specific-bubble': { light: 'rgb(214, 235, 255)', dark: 'rgb(14, 30, 56)' },
+  '--dsw-specific-bubble-highlight': { light: 'rgb(178, 216, 255)', dark: 'rgb(24, 48, 88)' },
+  '--dsw-specific-input-major': { light: 'rgb(255, 255, 255)', dark: 'rgb(10, 20, 40)' },
+  '--dsw-alias-brand-primary': { light: 'rgb(0, 105, 255)', dark: 'rgb(96, 160, 255)' },
+  '--dsw-alias-button-info-fill': { light: 'rgb(0, 105, 255)', dark: 'rgb(84, 150, 255)' },
+  '--dsw-alias-state-business-primary': { light: 'rgb(0, 105, 255)', dark: 'rgb(84, 150, 255)' },
+  '--dsw-specific-sidebar-nav-item-active': { light: 'rgb(214, 232, 255)', dark: 'rgb(18, 36, 70)' },
+  // #107：nav-item-active-accent 同时是「推荐徽标」底色（宿主 .badge 用它当 background、
+  // 用 button-info-fill 当文字色）——两者同色时徽标文字隐形（实测 1.0:1）。
+  // 这里刻意让「当底」的一侧足够极端（浅色几乎白 / 深色接近夜蓝）以保证文字可读；
+  // 单一取值无法同时满足明暗两侧 ≥4.5（浅色要 >235 级、深色要 <22 级）。
+  // 改动前为 rgb(0,105,255) / rgb(96,160,255)（与文字同色 → 徽标隐形）。
+  '--dsw-specific-sidebar-nav-item-active-accent': { light: 'rgb(250, 252, 255)', dark: 'rgb(18, 34, 64)' },
+  '--dsw-alias-label-primary': { light: 'rgb(10, 32, 62)', dark: 'rgb(232, 242, 255)' },
+  '--dsw-alias-label-secondary': { light: 'rgb(66, 98, 140)', dark: 'rgb(164, 186, 216)' },
+  '--dsw-alias-label-tertiary': { light: 'rgb(86, 112, 150)', dark: 'rgb(128, 152, 186)' },
+}
 
 function preset(id: string, name: string, tokens: Record<string, { light: string; dark: string }>, style?: string): Preset {
   return {
@@ -25,32 +51,10 @@ function preset(id: string, name: string, tokens: Record<string, { light: string
 
 export const DEMO_PRESETS: Preset[] = [
   // 默认出厂预设：海蓝色印象（亮 = 海面浅蓝/海雾白，暗 = 深海夜蓝），唯一出厂预设（#82/#95）
-  preset('default', '默认', {
-    '--dsw-alias-bg-base': { light: 'rgb(240, 248, 255)', dark: 'rgb(6, 14, 30)' },
-    '--dsw-alias-bg-layer-1': { light: 'rgb(255, 255, 255)', dark: 'rgb(12, 22, 42)' },
-    '--dsw-alias-bg-layer-2': { light: 'rgb(226, 241, 255)', dark: 'rgb(18, 32, 58)' },
-    '--dsw-specific-sidebar-fill': { light: 'rgb(230, 243, 255)', dark: 'rgb(4, 10, 24)' },
-    '--dsw-specific-bubble': { light: 'rgb(214, 235, 255)', dark: 'rgb(14, 30, 56)' },
-    '--dsw-specific-bubble-highlight': { light: 'rgb(178, 216, 255)', dark: 'rgb(24, 48, 88)' },
-    '--dsw-specific-input-major': { light: 'rgb(255, 255, 255)', dark: 'rgb(10, 20, 40)' },
-    '--dsw-alias-brand-primary': { light: 'rgb(0, 105, 255)', dark: 'rgb(96, 160, 255)' },
-    '--dsw-alias-button-info-fill': { light: 'rgb(0, 105, 255)', dark: 'rgb(84, 150, 255)' },
-    '--dsw-alias-state-business-primary': { light: 'rgb(0, 105, 255)', dark: 'rgb(84, 150, 255)' },
-    '--dsw-specific-sidebar-nav-item-active': { light: 'rgb(214, 232, 255)', dark: 'rgb(18, 36, 70)' },
-    // #107：nav-item-active-accent 同时是「推荐徽标」底色（宿主 .badge 用它当 background、
-    // 用 button-info-fill 当文字色）——两者同色时徽标文字隐形（实测 1.0:1）。
-    // 这里刻意让「当底」的一侧足够极端（浅色几乎白 / 深色接近夜蓝）以保证文字可读；
-    // 单一取值无法同时满足明暗两侧 ≥4.5（浅色要 >235 级、深色要 <22 级）。
-    // 改动前为 rgb(0,105,255) / rgb(96,160,255)（与文字同色 → 徽标隐形）。
-    '--dsw-specific-sidebar-nav-item-active-accent': { light: 'rgb(250, 252, 255)', dark: 'rgb(18, 34, 64)' },
-    '--dsw-alias-label-primary': { light: 'rgb(10, 32, 62)', dark: 'rgb(232, 242, 255)' },
-    '--dsw-alias-label-secondary': { light: 'rgb(66, 98, 140)', dark: 'rgb(164, 186, 216)' },
-    '--dsw-alias-label-tertiary': { light: 'rgb(86, 112, 150)', dark: 'rgb(128, 152, 186)' },
-  }, '海洋清爽'),
+  preset('default', '默认', DEMO_DEFAULT_TOKENS, '海洋清爽'),
 ]
 
 /** 出厂预设 id 集合（apply/audit 用）。 */
 export function isDemoPreset(id: string): boolean {
   return DEMO_PRESETS.some(preset => preset.id === id)
 }
-

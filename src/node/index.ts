@@ -32,6 +32,8 @@ import { registerPresetTools, isToolsRegistered, readActiveState, writeActiveSta
 import type { ToolsEnv } from './tools.ts'
 import { resolveConfiguredDirs, type UiPresetsConfig } from './config.ts'
 import { DEMO_PRESETS } from '../core/demo-data.ts'
+import { BUILTIN_ASSETS } from './builtin-assets.ts'
+import { seedBuiltinPreset, type SeedPort, type SeedResult } from '../core/seed.ts'
 
 // #95（正式收尾）：插件改名 wallpaper-plugin——注册名/日志前缀同步；路由前缀 /ui-presets
 // 与数据目录（<dshHome>/.ui-presets、data/ui-presets）作为内部 API/存量数据保留不变。
@@ -246,6 +248,12 @@ export function apply(ctx: ContextLike, config: UiPresetsConfig = {}): void {
       mkdirSync(DATA_DIR, { recursive: true })
       mkdirSync(ASSETS_DIR, { recursive: true })
     } catch { /* 目录创建失败：写端点会报 500，读端点空列表 */ }
+
+    // #108：出厂预设播种（带壁纸的「默认」）——库内已有同名预设则静默跳过，不覆盖用户数据。
+    const seeded = seedBuiltinAssetsAndPreset()
+    if (seeded !== null && seeded.seeded) {
+      console.log(`[wallpaper-plugin] 已播种出厂预设「默认」（素材新增 ${seeded.assetsWritten.length} / 复用 ${seeded.assetsKept.length}${seeded.activated ? '，并已应用' : ''}）`)
+    }
 
     httpCtx.effect(() => {
     const disposers: Array<() => void> = []
@@ -740,6 +748,43 @@ function writeAssetFile(id: string, name: string, mime: string, bytes: Uint8Arra
 /** #106：内容哈希（SHA-256 hex）。 */
 function sha256Of(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex')
+}
+
+/**
+ * #108 播种出厂预设（「带壁纸的默认」）：库内无同名预设时，把内置三张壁纸落进壁纸库、
+ * 写好 `default` 预设（令牌 + 三部件 + 封面），并在「当前无任何活动预设」时自动应用。
+ *
+ * 触发时机：apply 内目录就绪后（webServer 注入回调）——只做一次磁盘写，失败不阻断启动
+ * （播种失败 = 回到旧行为：出厂兜底仍是纯令牌 demo 预设，界面可用）。
+ * 静默条件：库中已有 `default`（用户自己改过的「默认」）→ 跳过，绝不覆盖用户数据。
+ */
+function seedBuiltinAssetsAndPreset(): SeedResult | null {
+  try {
+    const port: SeedPort = {
+      hasPreset: (id) => existsSync(join(presetDir(id), 'preset.json')),
+      writePreset: (id, preset) => {
+        mkdirSync(presetDir(id), { recursive: true })
+        writeFileAtomic(join(presetDir(id), 'preset.json'), JSON.stringify(preset, null, 2))
+      },
+      readAssetMeta: (id) => readAssetMeta(id),
+      writeAsset: (asset, sha256) => {
+        writeAssetFile(asset.id, asset.name, asset.mime, asset.bytes, undefined, sha256)
+      },
+      activePresetId: () => readActiveState(toolsEnv()).activePresetId,
+      writeActivePreset: (id) => writeActiveState(toolsEnv(), id),
+    }
+    // base64 → 字节（builtin-assets.ts 是构建期产物：scripts/gen-builtin-assets.mjs）
+    const assets = BUILTIN_ASSETS.map(entry => ({
+      id: entry.id,
+      name: entry.name,
+      mime: entry.mime,
+      bytes: Uint8Array.from(Buffer.from(entry.base64, 'base64')),
+    }))
+    return seedBuiltinPreset(port, assets, sha256Of)
+  } catch (error) {
+    console.warn('[wallpaper-plugin] 出厂预设播种失败（不影响启动）：', safeErrorMessage(error))
+    return null
+  }
 }
 
 /** #106：去重命中时合并 layers 规格到已有 meta（文件不重复写，但分层合成规格必须跟上——

@@ -45,6 +45,28 @@ module.exports = __toCommonJS(index_exports);
 var React8 = __toESM(require("react"), 1);
 
 // src/core/demo-data.ts
+var DEMO_DEFAULT_TOKENS = {
+  "--dsw-alias-bg-base": { light: "rgb(240, 248, 255)", dark: "rgb(6, 14, 30)" },
+  "--dsw-alias-bg-layer-1": { light: "rgb(255, 255, 255)", dark: "rgb(12, 22, 42)" },
+  "--dsw-alias-bg-layer-2": { light: "rgb(226, 241, 255)", dark: "rgb(18, 32, 58)" },
+  "--dsw-specific-sidebar-fill": { light: "rgb(230, 243, 255)", dark: "rgb(4, 10, 24)" },
+  "--dsw-specific-bubble": { light: "rgb(214, 235, 255)", dark: "rgb(14, 30, 56)" },
+  "--dsw-specific-bubble-highlight": { light: "rgb(178, 216, 255)", dark: "rgb(24, 48, 88)" },
+  "--dsw-specific-input-major": { light: "rgb(255, 255, 255)", dark: "rgb(10, 20, 40)" },
+  "--dsw-alias-brand-primary": { light: "rgb(0, 105, 255)", dark: "rgb(96, 160, 255)" },
+  "--dsw-alias-button-info-fill": { light: "rgb(0, 105, 255)", dark: "rgb(84, 150, 255)" },
+  "--dsw-alias-state-business-primary": { light: "rgb(0, 105, 255)", dark: "rgb(84, 150, 255)" },
+  "--dsw-specific-sidebar-nav-item-active": { light: "rgb(214, 232, 255)", dark: "rgb(18, 36, 70)" },
+  // #107：nav-item-active-accent 同时是「推荐徽标」底色（宿主 .badge 用它当 background、
+  // 用 button-info-fill 当文字色）——两者同色时徽标文字隐形（实测 1.0:1）。
+  // 这里刻意让「当底」的一侧足够极端（浅色几乎白 / 深色接近夜蓝）以保证文字可读；
+  // 单一取值无法同时满足明暗两侧 ≥4.5（浅色要 >235 级、深色要 <22 级）。
+  // 改动前为 rgb(0,105,255) / rgb(96,160,255)（与文字同色 → 徽标隐形）。
+  "--dsw-specific-sidebar-nav-item-active-accent": { light: "rgb(250, 252, 255)", dark: "rgb(18, 34, 64)" },
+  "--dsw-alias-label-primary": { light: "rgb(10, 32, 62)", dark: "rgb(232, 242, 255)" },
+  "--dsw-alias-label-secondary": { light: "rgb(66, 98, 140)", dark: "rgb(164, 186, 216)" },
+  "--dsw-alias-label-tertiary": { light: "rgb(86, 112, 150)", dark: "rgb(128, 152, 186)" }
+};
 function preset(id, name2, tokens, style) {
   return {
     schemaVersion: 1,
@@ -60,28 +82,7 @@ function preset(id, name2, tokens, style) {
 }
 var DEMO_PRESETS = [
   // 默认出厂预设：海蓝色印象（亮 = 海面浅蓝/海雾白，暗 = 深海夜蓝），唯一出厂预设（#82/#95）
-  preset("default", "\u9ED8\u8BA4", {
-    "--dsw-alias-bg-base": { light: "rgb(240, 248, 255)", dark: "rgb(6, 14, 30)" },
-    "--dsw-alias-bg-layer-1": { light: "rgb(255, 255, 255)", dark: "rgb(12, 22, 42)" },
-    "--dsw-alias-bg-layer-2": { light: "rgb(226, 241, 255)", dark: "rgb(18, 32, 58)" },
-    "--dsw-specific-sidebar-fill": { light: "rgb(230, 243, 255)", dark: "rgb(4, 10, 24)" },
-    "--dsw-specific-bubble": { light: "rgb(214, 235, 255)", dark: "rgb(14, 30, 56)" },
-    "--dsw-specific-bubble-highlight": { light: "rgb(178, 216, 255)", dark: "rgb(24, 48, 88)" },
-    "--dsw-specific-input-major": { light: "rgb(255, 255, 255)", dark: "rgb(10, 20, 40)" },
-    "--dsw-alias-brand-primary": { light: "rgb(0, 105, 255)", dark: "rgb(96, 160, 255)" },
-    "--dsw-alias-button-info-fill": { light: "rgb(0, 105, 255)", dark: "rgb(84, 150, 255)" },
-    "--dsw-alias-state-business-primary": { light: "rgb(0, 105, 255)", dark: "rgb(84, 150, 255)" },
-    "--dsw-specific-sidebar-nav-item-active": { light: "rgb(214, 232, 255)", dark: "rgb(18, 36, 70)" },
-    // #107：nav-item-active-accent 同时是「推荐徽标」底色（宿主 .badge 用它当 background、
-    // 用 button-info-fill 当文字色）——两者同色时徽标文字隐形（实测 1.0:1）。
-    // 这里刻意让「当底」的一侧足够极端（浅色几乎白 / 深色接近夜蓝）以保证文字可读；
-    // 单一取值无法同时满足明暗两侧 ≥4.5（浅色要 >235 级、深色要 <22 级）。
-    // 改动前为 rgb(0,105,255) / rgb(96,160,255)（与文字同色 → 徽标隐形）。
-    "--dsw-specific-sidebar-nav-item-active-accent": { light: "rgb(250, 252, 255)", dark: "rgb(18, 34, 64)" },
-    "--dsw-alias-label-primary": { light: "rgb(10, 32, 62)", dark: "rgb(232, 242, 255)" },
-    "--dsw-alias-label-secondary": { light: "rgb(66, 98, 140)", dark: "rgb(164, 186, 216)" },
-    "--dsw-alias-label-tertiary": { light: "rgb(86, 112, 150)", dark: "rgb(128, 152, 186)" }
-  }, "\u6D77\u6D0B\u6E05\u723D")
+  preset("default", "\u9ED8\u8BA4", DEMO_DEFAULT_TOKENS, "\u6D77\u6D0B\u6E05\u723D")
 ];
 
 // src/client/env.ts
