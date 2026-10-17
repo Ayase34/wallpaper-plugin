@@ -6,6 +6,7 @@
  */
 
 import { CATALOG, CATALOG_DSH_VERSION } from './catalog-data.ts'
+import { CATALOG_EXTRA } from './catalog-extra.ts'
 
 /** 令牌分组（与盘点 §2 对齐）。 */
 export type TokenGroup =
@@ -20,8 +21,11 @@ export type TokenGroup =
   | 'alias-markdown'
   | 'alias-scrollbar'
   | 'alias-overlay'
+  | 'alias-settings'
   | 'specific'    // --dsw-specific-* 组件专属
   | 'font'
+  | 'radius'      // 圆角与 corner-shape（#111 补录）
+  | 'motion'      // 过渡时长与缓动（#111 补录）
   | 'shadow'
   | 'gradient'
   | 'shiki'
@@ -47,16 +51,30 @@ export interface TokenCatalogEntry {
   description: string
 }
 
-/** 目录快照。 */
+/** 目录快照（#111：主目录 + theme 包补录，按名字去重——主目录优先）。 */
 export interface TokenCatalog {
   dshVersion: string
   entries: TokenCatalogEntry[]
 }
 
+const mergedEntries: TokenCatalogEntry[] = (() => {
+  const seen = new Set(CATALOG.map(entry => entry.name))
+  const extra = CATALOG_EXTRA.filter(entry => !seen.has(entry.name)) as TokenCatalogEntry[]
+  // #111：旧目录把动效令牌归在 other（gen-catalog 的分组规则尚未认识 motion）——
+  // 合并时统一归一，保证 UI 分组与旋钮分类一致。
+  const normalize = (entry: TokenCatalogEntry): TokenCatalogEntry => {
+    if (entry.group === 'other' && (entry.name.includes('transition') || entry.name.includes('ease'))) {
+      return { ...entry, group: 'motion' }
+    }
+    return entry
+  }
+  return [...CATALOG, ...extra].map(normalize)
+})()
+
 /** 生成脚本产出的目录快照（带 DSH 版本标记）。 */
 export const catalog: TokenCatalog = {
   dshVersion: CATALOG_DSH_VERSION,
-  entries: CATALOG,
+  entries: mergedEntries,
 }
 
 /** 按令牌名查条目。 */
@@ -68,5 +86,6 @@ export function findToken(name: string): TokenCatalogEntry | undefined {
 export const GROUP_ORDER: TokenGroup[] = [
   'alias-bg', 'alias-border', 'alias-brand', 'alias-label', 'alias-button',
   'alias-interactive', 'alias-state', 'alias-markdown', 'alias-scrollbar',
-  'alias-overlay', 'specific', 'static', 'font', 'shadow', 'gradient', 'shiki', 'scrollbar', 'other',
+  'alias-overlay', 'alias-settings', 'specific', 'static', 'font', 'radius', 'motion',
+  'shadow', 'gradient', 'shiki', 'scrollbar', 'other',
 ]

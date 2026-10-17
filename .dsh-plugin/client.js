@@ -2216,10 +2216,78 @@ var CATALOG = [
   { name: "--shiki-token-string-expression", group: "shiki", light: "#2b8a3e", dark: "#8ce99a", valueType: "color", safety: "caution", scope: "local", description: "" }
 ];
 
+// src/core/catalog-extra.ts
+var CATALOG_EXTRA = [
+  { name: "--dsw-alias-bg-document-preview", group: "alias-bg", light: "var(--dsw-static-neutral-bluish-100)", dark: "var(--dsw-static-neutral-bluish-950)", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-alias-bg-document-selection", group: "alias-bg", light: "color-mix(in srgb, var(--dsw-static-blue-500) 40%, transparent)", dark: "color-mix(in srgb, var(--dsw-static-blue-500) 40%, transparent)", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-alias-code-diff-added", group: "other", light: "var(--dsw-static-green-500-a08)", dark: "var(--dsw-static-green-500-a12)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-code-diff-deleted", group: "other", light: "var(--dsw-static-red-600-a08)", dark: "var(--dsw-static-red-400-a12)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-file-diff-added-bg", group: "other", light: "#e6f4e7", dark: "#1f3124", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-file-diff-added-gutter", group: "other", light: "#edf7ed", dark: "#132016", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-file-diff-added-marker", group: "other", light: "#01a241", dark: "#41c977", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-file-diff-deleted-bg", group: "other", light: "#fce6e2", dark: "#3c1f1b", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-file-diff-deleted-gutter", group: "other", light: "#fdece9", dark: "#28130e", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-file-diff-deleted-marker", group: "other", light: "#ba2723", dark: "#fa423e", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-label-deep-diving", group: "alias-label", light: "color-mix(in srgb, var(--dsw-static-deepseek-500) 70%, var(--dsw-static-blue-950))", dark: "color-mix(in srgb, var(--dsw-static-deepseek-450) 55%, var(--dsw-static-neutral-bluish-400))", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-alias-label-deep-diving-shimmer", group: "alias-label", light: "color-mix(in srgb, var(--dsw-static-deepseek-500) 30%, var(--dsw-static-blue-950))", dark: "color-mix(in srgb, var(--dsw-static-blue-300) 65%, var(--dsw-static-deepseek-400))", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-alias-label-document-preview", group: "alias-label", light: "var(--dsw-static-neutral-bluish-700)", dark: "var(--dsw-static-neutral-bluish-300)", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-alias-label-shimmer", group: "alias-label", light: "color-mix(in srgb, var(--dsw-static-neutral-1000) 30%, transparent)", dark: "color-mix(in srgb, var(--dsw-static-neutral-00) 45%, transparent)", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-alias-link", group: "other", light: "var(--dsw-static-deepseek-500)", dark: "var(--dsw-static-deepseek-400)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-menu-group-header-fill", group: "other", light: "#f8f9faf0", dark: "#303136f0", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-menu-icon", group: "other", light: "var(--dsw-static-neutral-bluish-800)", dark: "var(--dsw-alias-label-primary-dimmed)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-onboarding-accent", group: "other", light: "#3964fe", dark: "#3964fe", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-onboarding-card-fill", group: "other", light: "color-mix(in srgb, var(--dsw-static-neutral-bluish-00) 80%, transparent)", dark: "color-mix(in srgb, var(--dsw-static-neutral-bluish-850) 80%, transparent)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-onboarding-checkbox-border", group: "alias-border", light: "color-mix(in srgb, var(--dsw-static-neutral-bluish-1000) 20%, transparent)", dark: "var(--dsw-alias-border-l2)", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-alias-onboarding-secondary-fill", group: "other", light: "var(--dsw-static-neutral-bluish-00)", dark: "#48494c", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-settings-card-fill", group: "alias-settings", light: "var(--dsw-alias-bg-layer-2)", dark: "var(--dsw-alias-bg-layer-2)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-settings-card-stroke", group: "alias-settings", light: "var(--dsw-alias-border-l4)", dark: "var(--dsw-alias-border-l4)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-state-idle-primary", group: "alias-state", light: "var(--dsw-static-neutral-300)", dark: "var(--dsw-static-neutral-600)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-switch-thumb", group: "other", light: "var(--dsw-static-neutral-bluish-00)", dark: "var(--dsw-static-neutral-bluish-400)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-toast-label", group: "alias-label", light: "var(--dsw-static-neutral-bluish-00)", dark: "var(--dsw-static-neutral-bluish-00)", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-alias-tooltip-key-bg", group: "alias-overlay", light: "color-mix(in srgb, var(--dsw-alias-tooltip-bg), white 18%)", dark: "color-mix(in srgb, var(--dsw-alias-tooltip-bg), white 18%)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-turn-trigger-bg", group: "other", light: "var(--dsw-alias-markdown-code-block)", dark: "var(--dsw-alias-interactive-bg-hover)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-turn-trigger-bg-hover", group: "alias-bg", light: "var(--dsw-alias-interactive-bg-hover)", dark: "var(--dsw-alias-interactive-bg-active)", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-corner-shape", group: "radius", light: "superellipse(1.5)", dark: "superellipse(1.5)", valueType: "string", safety: "caution", scope: "global", description: "" },
+  { name: "--dsw-elevation-panel", group: "other", light: "var(--dsw-elevation-stroke), 0 3px 8px 0 #00000008, 0 0 16px 0 #00000005", dark: "var(--dsw-elevation-stroke), 0 3px 8px 0 #00000008, 0 0 16px 0 #00000005", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-elevation-prominent", group: "other", light: "var(--dsw-elevation-stroke), 0 3px 8px 0 #0000000a, 0 0 20px 0 #0000000d", dark: "var(--dsw-elevation-stroke), 0 3px 8px 0 #0000000a, 0 0 20px 0 #0000000d", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-elevation-soft", group: "other", light: "var(--dsw-elevation-stroke), 0 4px 16px 0 #00000008, 0 0 24px 0 #00000008", dark: "var(--dsw-elevation-stroke), 0 4px 16px 0 #00000008, 0 0 24px 0 #00000008", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-elevation-stroke", group: "other", light: "0 0 0 .5px var(--dsw-elevation-stroke-color)", dark: "0 0 0 .5px var(--dsw-elevation-stroke-color)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-elevation-stroke-color", group: "other", light: "var(--dsw-alias-border-l4)", dark: "var(--dsw-alias-border-l3)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-focus-ring-color", group: "other", light: "transparent", dark: "transparent", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-focus-ring-width", group: "other", light: "2px", dark: "2px", valueType: "length", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-font-family-brand", group: "font", light: '"Montserrat", var(--dsh-font-family-text-default)', dark: '"Montserrat", var(--dsh-font-family-text-default)', valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-gradient-onboarding-blue-stops", group: "other", light: "#3964fe 18.75%, #398efe 51.78%, #6dccff 86.252%, #3964fe", dark: "#3964fe 18.75%, #398efe 51.78%, #6dccff 86.252%, #3964fe", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-gradient-onboarding-cyan-stops", group: "other", light: "#0293b4 21.154%, #2dc8eb 50.954%, #aff0ff 85.326%, #0293b4", dark: "#0293b4 21.154%, #2dc8eb 50.954%, #aff0ff 85.326%, #0293b4", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-gradient-onboarding-violet-stops", group: "other", light: "#2a2fb6 33.102%, #8b76f6 50.954%, #c5c0ff 85.326%, #2a2fb6", dark: "#2a2fb6 33.102%, #8b76f6 50.954%, #c5c0ff 85.326%, #2a2fb6", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-menu-backdrop-filter", group: "other", light: "blur(40px) saturate(150%)", dark: "blur(40px) saturate(150%)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-menu-surface-fill", group: "other", light: "#f8f9fa94", dark: "#43454a73", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-radius-lg", group: "radius", light: "16px", dark: "16px", valueType: "length", safety: "caution", scope: "global", description: "" },
+  { name: "--dsw-radius-md", group: "radius", light: "12px", dark: "12px", valueType: "length", safety: "caution", scope: "global", description: "" },
+  { name: "--dsw-radius-panel", group: "radius", light: "28px", dark: "28px", valueType: "length", safety: "caution", scope: "global", description: "" },
+  { name: "--dsw-radius-sm", group: "radius", light: "8px", dark: "8px", valueType: "length", safety: "caution", scope: "global", description: "" },
+  { name: "--dsw-radius-xl", group: "radius", light: "20px", dark: "20px", valueType: "length", safety: "caution", scope: "global", description: "" },
+  { name: "--dsw-radius-xs", group: "radius", light: "4px", dark: "4px", valueType: "length", safety: "caution", scope: "global", description: "" },
+  { name: "--dsw-static-green-500-a08", group: "static", light: "#22c55e14", dark: "#22c55e14", valueType: "color", safety: "caution", scope: "local", description: "" },
+  { name: "--dsw-static-green-500-a12", group: "static", light: "#22c55e1f", dark: "#22c55e1f", valueType: "color", safety: "caution", scope: "local", description: "" },
+  { name: "--dsw-static-red-400-a12", group: "static", light: "#f25a5a1f", dark: "#f25a5a1f", valueType: "color", safety: "caution", scope: "local", description: "" },
+  { name: "--dsw-static-red-600-a08", group: "static", light: "#ec131314", dark: "#ec131314", valueType: "color", safety: "caution", scope: "local", description: "" }
+];
+
 // src/core/catalog.ts
+var mergedEntries = (() => {
+  const seen = new Set(CATALOG.map((entry) => entry.name));
+  const extra = CATALOG_EXTRA.filter((entry) => !seen.has(entry.name));
+  const normalize = (entry) => {
+    if (entry.group === "other" && (entry.name.includes("transition") || entry.name.includes("ease"))) {
+      return { ...entry, group: "motion" };
+    }
+    return entry;
+  };
+  return [...CATALOG, ...extra].map(normalize);
+})();
 var catalog = {
   dshVersion: CATALOG_DSH_VERSION,
-  entries: CATALOG
+  entries: mergedEntries
 };
 function findToken(name2) {
   return catalog.entries.find((entry) => entry.name === name2);
@@ -2235,9 +2303,12 @@ var GROUP_ORDER = [
   "alias-markdown",
   "alias-scrollbar",
   "alias-overlay",
+  "alias-settings",
   "specific",
   "static",
   "font",
+  "radius",
+  "motion",
   "shadow",
   "gradient",
   "shiki",

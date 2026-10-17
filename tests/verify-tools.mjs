@@ -65,7 +65,7 @@ const stubDefineTool = def => def
 const defs = createPresetToolDefs(env, stubDefineTool)
 const byName = Object.fromEntries(defs.map(d => [d.name, d]))
 const NAMES = ['preset_list', 'preset_apply', 'preset_inspect', 'preset_create', 'preset_catalog', 'preset_get',
-  'preset_update', 'preset_delete', 'preset_revert', 'preset_restore_backup', 'asset_list', 'preset_check']
+  'preset_update', 'preset_delete', 'preset_revert', 'preset_restore_backup', 'asset_list', 'preset_check', 'preset_palette']
 const T = (name) => byName[name]
 
 const BG = { light: '#ffffff', dark: '#000000' }
@@ -74,7 +74,7 @@ const hex = (i) => `#30${String(i % 10)}45${i % 10}`
 // ============ 有效性 ============
 
 // 1. 工具定义齐全且 name 唯一
-check(`工具定义 12 个齐全（${defs.length}）`, defs.length === 12)
+check(`工具定义 12 个齐全（${defs.length}）`, defs.length === 13)
 check('工具 name 全部匹配且唯一', NAMES.length === defs.length
   && NAMES.every(n => byName[n] !== undefined) && new Set(NAMES).size === NAMES.length)
 
@@ -292,6 +292,62 @@ for (const id of ids) {
 // 损坏预设 HTTP 删除会失败（preset.json 读不到合法 JSON）→ 直接删目录，
 // 保证不留垃圾（否则后续 selfcheck 数据完整性误报）
 try { rmSync(join(env.presetsDir, ids[0]), { recursive: true, force: true }) } catch { /* 忽略 */ }
+
+
+// ============ #111 新增能力：knobs / palette / cover / basePresetId / wallpaper_presence ============
+const paletteResult = await T('preset_palette').execute({ seed: '#8A3A70', mood: 'retro', contrast: 'AA' }, {})
+check('#111 preset_palette 生成 ≥35 个双值令牌', Object.keys(paletteResult.tokens).length >= 35
+  && Object.values(paletteResult.tokens).every(v => typeof v.light === 'string' && typeof v.dark === 'string' && v.light !== ''))
+assertLossless('preset_palette', paletteResult)
+const paletteRender = T('preset_palette').output.render({ seed: '#8A3A70', mood: 'retro', contrast: 'AA' }, paletteResult).map(c => c.text).join('\n')
+check('#111 preset_palette render 含令牌表与预检摘要',
+  paletteRender.includes('调色板：seed=#8A3A70') && paletteRender.includes('--dsw-alias-bg-base') && paletteRender.includes('预检：'))
+
+const knobPreset = await T('preset_create').execute({
+  name: '旋钮测试', knobs: { 'spatial-bg': '#123456', 'radius-scale': '胶囊', 'motion-speed': '舒缓' },
+}, {})
+check('#111 仅用 knobs 即可创建（无需 tokens）', knobPreset.ok === true)
+const knobDetail = await T('preset_get').execute({ id: knobPreset.id }, {})
+check('#111 knobs 展开为令牌（spatial-bg + 圆角六项 + 动效）',
+  knobDetail.preset.tokens['--dsw-alias-bg-base'].light === '#123456'
+  && knobDetail.preset.tokens['--dsw-radius-panel'].light === '44px'
+  && knobDetail.preset.tokens['--ds-transition-duration'].light === '0.32s')
+
+const palettePreset = await T('preset_create').execute({ name: '调色板测试', palette: { seed: '#2E6F5E', mood: 'night' } }, {})
+check('#111 palette 直接建预设', palettePreset.ok === true)
+const paletteDetail = await T('preset_get').execute({ id: palettePreset.id }, {})
+check('#111 palette 产出完整令牌集', Object.keys(paletteDetail.preset.tokens).length >= 35)
+
+const withWallpaper = await T('preset_create').execute({
+  name: '壁纸存在感测试',
+  tokens: { '--dsw-alias-bg-base': { light: '#f7f7f7', dark: '#111111' } },
+  assets: [{ id: 'asset-verify-x', name: 'x.png', mime: 'image/png' }],
+  widgets: [{ id: 'chat-background', params: { assetId: 'asset-verify-x', opacity: '0.5' } }],
+  wallpaper_presence: 0.2,
+  cover: { assetId: 'asset-verify-x' },
+}, {})
+check('#111 wallpaper_presence + cover 可写入', withWallpaper.ok === true)
+const wallpaperDetail = await T('preset_get').execute({ id: withWallpaper.id }, {})
+check('#111 wallpaper_presence 覆盖部件 opacity（0.2）',
+  wallpaperDetail.preset.widgets[0].params.opacity === '0.2')
+check('#111 cover 已写入', wallpaperDetail.preset.cover !== null && wallpaperDetail.preset.cover.assetId === 'asset-verify-x')
+
+await expectThrow('#111 cover 引用未声明素材抛错', () => T('preset_create').execute({
+  name: '坏封面', tokens: { '--dsw-alias-bg-base': { light: '#fff', dark: '#000' } }, cover: { assetId: 'asset-nope' },
+}, {}))
+
+const checkBase = await T('preset_check').execute({ basePresetId: 'default' }, {})
+check('#111 preset_check 支持 basePresetId（出厂默认应无阻断）', checkBase.ok === true)
+const checkMerged = await T('preset_check').execute({
+  basePresetId: 'default',
+  merge_tokens: { '--dsw-alias-label-primary': { light: '#fefefe', dark: '#ffffff' } },
+}, {})
+check('#111 basePresetId + merge_tokens 增量预检（应报低对比）', checkMerged.issues.length > 0)
+
+// 清理本组创建的三条测试预设
+for (const id of [knobPreset.id, palettePreset.id, withWallpaper.id]) {
+  await T('preset_delete').execute({ id }, {})
+}
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(process.exitCode ?? 0)

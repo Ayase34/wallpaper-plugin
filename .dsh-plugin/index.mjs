@@ -105,10 +105,10 @@ var Binary;
   Binary2.toHex = toHex;
   function fromHex(source) {
     if (typeof Buffer !== "undefined") return fromSource(Buffer.from(source, "hex"));
-    const hex = source.length % 2 === 0 ? source : source.slice(0, source.length - 1);
+    const hex2 = source.length % 2 === 0 ? source : source.slice(0, source.length - 1);
     const buffer = [];
-    for (let i = 0; i < hex.length; i += 2) {
-      buffer.push(parseInt(`${hex[i]}${hex[i + 1]}`, 16));
+    for (let i = 0; i < hex2.length; i += 2) {
+      buffer.push(parseInt(`${hex2[i]}${hex2[i + 1]}`, 16));
     }
     return Uint8Array.from(buffer).buffer;
   }
@@ -1678,10 +1678,78 @@ var CATALOG = [
   { name: "--shiki-token-string-expression", group: "shiki", light: "#2b8a3e", dark: "#8ce99a", valueType: "color", safety: "caution", scope: "local", description: "" }
 ];
 
+// src/core/catalog-extra.ts
+var CATALOG_EXTRA = [
+  { name: "--dsw-alias-bg-document-preview", group: "alias-bg", light: "var(--dsw-static-neutral-bluish-100)", dark: "var(--dsw-static-neutral-bluish-950)", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-alias-bg-document-selection", group: "alias-bg", light: "color-mix(in srgb, var(--dsw-static-blue-500) 40%, transparent)", dark: "color-mix(in srgb, var(--dsw-static-blue-500) 40%, transparent)", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-alias-code-diff-added", group: "other", light: "var(--dsw-static-green-500-a08)", dark: "var(--dsw-static-green-500-a12)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-code-diff-deleted", group: "other", light: "var(--dsw-static-red-600-a08)", dark: "var(--dsw-static-red-400-a12)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-file-diff-added-bg", group: "other", light: "#e6f4e7", dark: "#1f3124", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-file-diff-added-gutter", group: "other", light: "#edf7ed", dark: "#132016", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-file-diff-added-marker", group: "other", light: "#01a241", dark: "#41c977", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-file-diff-deleted-bg", group: "other", light: "#fce6e2", dark: "#3c1f1b", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-file-diff-deleted-gutter", group: "other", light: "#fdece9", dark: "#28130e", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-file-diff-deleted-marker", group: "other", light: "#ba2723", dark: "#fa423e", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-label-deep-diving", group: "alias-label", light: "color-mix(in srgb, var(--dsw-static-deepseek-500) 70%, var(--dsw-static-blue-950))", dark: "color-mix(in srgb, var(--dsw-static-deepseek-450) 55%, var(--dsw-static-neutral-bluish-400))", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-alias-label-deep-diving-shimmer", group: "alias-label", light: "color-mix(in srgb, var(--dsw-static-deepseek-500) 30%, var(--dsw-static-blue-950))", dark: "color-mix(in srgb, var(--dsw-static-blue-300) 65%, var(--dsw-static-deepseek-400))", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-alias-label-document-preview", group: "alias-label", light: "var(--dsw-static-neutral-bluish-700)", dark: "var(--dsw-static-neutral-bluish-300)", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-alias-label-shimmer", group: "alias-label", light: "color-mix(in srgb, var(--dsw-static-neutral-1000) 30%, transparent)", dark: "color-mix(in srgb, var(--dsw-static-neutral-00) 45%, transparent)", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-alias-link", group: "other", light: "var(--dsw-static-deepseek-500)", dark: "var(--dsw-static-deepseek-400)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-menu-group-header-fill", group: "other", light: "#f8f9faf0", dark: "#303136f0", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-menu-icon", group: "other", light: "var(--dsw-static-neutral-bluish-800)", dark: "var(--dsw-alias-label-primary-dimmed)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-onboarding-accent", group: "other", light: "#3964fe", dark: "#3964fe", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-onboarding-card-fill", group: "other", light: "color-mix(in srgb, var(--dsw-static-neutral-bluish-00) 80%, transparent)", dark: "color-mix(in srgb, var(--dsw-static-neutral-bluish-850) 80%, transparent)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-onboarding-checkbox-border", group: "alias-border", light: "color-mix(in srgb, var(--dsw-static-neutral-bluish-1000) 20%, transparent)", dark: "var(--dsw-alias-border-l2)", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-alias-onboarding-secondary-fill", group: "other", light: "var(--dsw-static-neutral-bluish-00)", dark: "#48494c", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-settings-card-fill", group: "alias-settings", light: "var(--dsw-alias-bg-layer-2)", dark: "var(--dsw-alias-bg-layer-2)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-settings-card-stroke", group: "alias-settings", light: "var(--dsw-alias-border-l4)", dark: "var(--dsw-alias-border-l4)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-state-idle-primary", group: "alias-state", light: "var(--dsw-static-neutral-300)", dark: "var(--dsw-static-neutral-600)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-switch-thumb", group: "other", light: "var(--dsw-static-neutral-bluish-00)", dark: "var(--dsw-static-neutral-bluish-400)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-toast-label", group: "alias-label", light: "var(--dsw-static-neutral-bluish-00)", dark: "var(--dsw-static-neutral-bluish-00)", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-alias-tooltip-key-bg", group: "alias-overlay", light: "color-mix(in srgb, var(--dsw-alias-tooltip-bg), white 18%)", dark: "color-mix(in srgb, var(--dsw-alias-tooltip-bg), white 18%)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-turn-trigger-bg", group: "other", light: "var(--dsw-alias-markdown-code-block)", dark: "var(--dsw-alias-interactive-bg-hover)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-alias-turn-trigger-bg-hover", group: "alias-bg", light: "var(--dsw-alias-interactive-bg-hover)", dark: "var(--dsw-alias-interactive-bg-active)", valueType: "string", safety: "safe", scope: "global", description: "" },
+  { name: "--dsw-corner-shape", group: "radius", light: "superellipse(1.5)", dark: "superellipse(1.5)", valueType: "string", safety: "caution", scope: "global", description: "" },
+  { name: "--dsw-elevation-panel", group: "other", light: "var(--dsw-elevation-stroke), 0 3px 8px 0 #00000008, 0 0 16px 0 #00000005", dark: "var(--dsw-elevation-stroke), 0 3px 8px 0 #00000008, 0 0 16px 0 #00000005", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-elevation-prominent", group: "other", light: "var(--dsw-elevation-stroke), 0 3px 8px 0 #0000000a, 0 0 20px 0 #0000000d", dark: "var(--dsw-elevation-stroke), 0 3px 8px 0 #0000000a, 0 0 20px 0 #0000000d", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-elevation-soft", group: "other", light: "var(--dsw-elevation-stroke), 0 4px 16px 0 #00000008, 0 0 24px 0 #00000008", dark: "var(--dsw-elevation-stroke), 0 4px 16px 0 #00000008, 0 0 24px 0 #00000008", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-elevation-stroke", group: "other", light: "0 0 0 .5px var(--dsw-elevation-stroke-color)", dark: "0 0 0 .5px var(--dsw-elevation-stroke-color)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-elevation-stroke-color", group: "other", light: "var(--dsw-alias-border-l4)", dark: "var(--dsw-alias-border-l3)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-focus-ring-color", group: "other", light: "transparent", dark: "transparent", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-focus-ring-width", group: "other", light: "2px", dark: "2px", valueType: "length", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-font-family-brand", group: "font", light: '"Montserrat", var(--dsh-font-family-text-default)', dark: '"Montserrat", var(--dsh-font-family-text-default)', valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-gradient-onboarding-blue-stops", group: "other", light: "#3964fe 18.75%, #398efe 51.78%, #6dccff 86.252%, #3964fe", dark: "#3964fe 18.75%, #398efe 51.78%, #6dccff 86.252%, #3964fe", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-gradient-onboarding-cyan-stops", group: "other", light: "#0293b4 21.154%, #2dc8eb 50.954%, #aff0ff 85.326%, #0293b4", dark: "#0293b4 21.154%, #2dc8eb 50.954%, #aff0ff 85.326%, #0293b4", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-gradient-onboarding-violet-stops", group: "other", light: "#2a2fb6 33.102%, #8b76f6 50.954%, #c5c0ff 85.326%, #2a2fb6", dark: "#2a2fb6 33.102%, #8b76f6 50.954%, #c5c0ff 85.326%, #2a2fb6", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-menu-backdrop-filter", group: "other", light: "blur(40px) saturate(150%)", dark: "blur(40px) saturate(150%)", valueType: "string", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-menu-surface-fill", group: "other", light: "#f8f9fa94", dark: "#43454a73", valueType: "color", safety: "safe", scope: "local", description: "" },
+  { name: "--dsw-radius-lg", group: "radius", light: "16px", dark: "16px", valueType: "length", safety: "caution", scope: "global", description: "" },
+  { name: "--dsw-radius-md", group: "radius", light: "12px", dark: "12px", valueType: "length", safety: "caution", scope: "global", description: "" },
+  { name: "--dsw-radius-panel", group: "radius", light: "28px", dark: "28px", valueType: "length", safety: "caution", scope: "global", description: "" },
+  { name: "--dsw-radius-sm", group: "radius", light: "8px", dark: "8px", valueType: "length", safety: "caution", scope: "global", description: "" },
+  { name: "--dsw-radius-xl", group: "radius", light: "20px", dark: "20px", valueType: "length", safety: "caution", scope: "global", description: "" },
+  { name: "--dsw-radius-xs", group: "radius", light: "4px", dark: "4px", valueType: "length", safety: "caution", scope: "global", description: "" },
+  { name: "--dsw-static-green-500-a08", group: "static", light: "#22c55e14", dark: "#22c55e14", valueType: "color", safety: "caution", scope: "local", description: "" },
+  { name: "--dsw-static-green-500-a12", group: "static", light: "#22c55e1f", dark: "#22c55e1f", valueType: "color", safety: "caution", scope: "local", description: "" },
+  { name: "--dsw-static-red-400-a12", group: "static", light: "#f25a5a1f", dark: "#f25a5a1f", valueType: "color", safety: "caution", scope: "local", description: "" },
+  { name: "--dsw-static-red-600-a08", group: "static", light: "#ec131314", dark: "#ec131314", valueType: "color", safety: "caution", scope: "local", description: "" }
+];
+
 // src/core/catalog.ts
+var mergedEntries = (() => {
+  const seen = new Set(CATALOG.map((entry) => entry.name));
+  const extra2 = CATALOG_EXTRA.filter((entry) => !seen.has(entry.name));
+  const normalize = (entry) => {
+    if (entry.group === "other" && (entry.name.includes("transition") || entry.name.includes("ease"))) {
+      return { ...entry, group: "motion" };
+    }
+    return entry;
+  };
+  return [...CATALOG, ...extra2].map(normalize);
+})();
 var catalog = {
   dshVersion: CATALOG_DSH_VERSION,
-  entries: CATALOG
+  entries: mergedEntries
 };
 
 // src/core/token-utils.ts
@@ -1886,138 +1954,12 @@ function parseZip(buffer) {
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-// src/core/knobs.ts
-var KNOB_CATEGORIES = [
-  { id: "spatial", name: "\u7A7A\u95F4\u5B9A\u4F4D", description: "\u754C\u9762\u5404\u533A\u57DF\u7684\u5E95\u8272\u4E0E\u6D6E\u5C42" },
-  { id: "layers", name: "\u80CC\u666F\u5C42\u6B21", description: "\u8FB9\u6846\u4E0E\u5206\u9694" },
-  { id: "accent", name: "\u5F3A\u8C03\u8272", description: "\u54C1\u724C\u4E0E\u4E3B\u64CD\u4F5C" },
-  { id: "text", name: "\u6587\u5B57\u53EF\u8BFB\u6027", description: "\u6587\u5B57\u989C\u8272\u4E0E\u5B57\u4F53" },
-  { id: "feedback", name: "\u4EA4\u4E92\u53CD\u9988", description: "\u72B6\u6001\u4E0E\u60AC\u505C" },
-  { id: "layout", name: "\u5E03\u5C40\u4E0E\u6392\u7248", description: "\u5BBD\u5EA6\u4E0E\u9634\u5F71" }
-];
-var KNOBS = [
-  // —— 空间定位（界面分区底色） ——
-  { id: "spatial-bg", category: "spatial", name: "\u80CC\u666F", description: "\u6574\u4E2A\u754C\u9762\u7684\u5E95\u8272\uFF0C\u6700\u5F71\u54CD\u89C2\u611F", control: "color", bundle: ["--dsw-alias-bg-base"] },
-  { id: "spatial-layer", category: "spatial", name: "\u62AC\u5347\u9762", description: "\u5361\u7247\u3001\u8F93\u5165\u6846\u3001\u5F39\u5C42\u6D6E\u51FA\u7684\u5C42\u6B21\u8272", control: "color", bundle: ["--dsw-alias-bg-layer-1", "--dsw-alias-bg-layer-2"] },
-  { id: "spatial-sidebar", category: "spatial", name: "\u4FA7\u8FB9\u680F", description: "\u5DE6\u4FA7\u5BFC\u822A\u680F\u80CC\u666F", control: "color", bundle: ["--dsw-specific-sidebar-fill"] },
-  { id: "spatial-bubble", category: "spatial", name: "\u5BF9\u8BDD\u6C14\u6CE1", description: "\u4F1A\u8BDD\u533A\u6D88\u606F\u6C14\u6CE1\u5E95\u8272", control: "color", bundle: ["--dsw-specific-bubble"] },
-  { id: "spatial-input", category: "spatial", name: "\u8F93\u5165\u6846", description: "\u5E95\u90E8\u8F93\u5165\u5361\u5E95\u8272", control: "color", bundle: ["--dsw-specific-input-major"] },
-  { id: "spatial-menu", category: "spatial", name: "\u83DC\u5355\u4E0E\u60AC\u6D6E\u5C42", description: "\u83DC\u5355\u3001\u63D0\u793A\u3001\u9009\u62E9\u5668\u3001\u906E\u7F69", control: "color", bundle: ["--dsw-specific-menu", "--dsw-specific-tip", "--dsw-specific-selector", "--dsw-alias-bg-overlay"] },
-  // —— 背景层次（边框与分隔） ——
-  { id: "border-level", category: "layers", name: "\u8FB9\u6846\u6DF1\u6D45", description: "\u5361\u7247\u4E0E\u5206\u533A\u7684\u4E00\u7EA7\u8FB9\u6846\uFF08\u7EC6\u5206\u7559\u9AD8\u7EA7\u4EE4\u724C\uFF09", control: "color", bundle: ["--dsw-alias-border-l2"] },
-  // —— 强调色（品牌与主操作） ——
-  { id: "accent-brand", category: "accent", name: "\u4E3B\u8272", description: "\u54C1\u724C\u4E3B\u8272\u3001\u4E3B\u6309\u94AE\u3001\u4E1A\u52A1\u72B6\u6001\u4E00\u6B21\u5168\u6539", control: "color", bundle: ["--dsw-alias-brand-primary", "--dsw-alias-button-info-fill", "--dsw-alias-state-business-primary"] },
-  { id: "accent-hover", category: "accent", name: "\u60AC\u505C\u8272", description: "\u4E3B\u6309\u94AE\u60AC\u505C\u53CD\u9988", control: "color", bundle: ["--dsw-alias-button-info-hover"] },
-  // —— 文字可读性 ——
-  { id: "text-primary", category: "text", name: "\u4E3B\u6587\u5B57", description: "\u6B63\u6587\u4E0E\u6807\u9898\u8272", control: "color", bundle: ["--dsw-alias-label-primary"] },
-  { id: "text-secondary", category: "text", name: "\u6B21\u8981\u6587\u5B57", description: "\u63CF\u8FF0\u4E0E\u8BF4\u660E\u6587\u5B57\u8272", control: "color", bundle: ["--dsw-alias-label-secondary"] },
-  { id: "text-tertiary", category: "text", name: "\u8F85\u52A9\u6587\u5B57", description: "\u5F31\u5316\u4E0E\u5360\u4F4D\u6587\u5B57\u8272", control: "color", bundle: ["--dsw-alias-label-tertiary"] },
-  {
-    id: "font-family",
-    category: "text",
-    name: "\u5B57\u4F53\u6863",
-    description: "\u5168\u5C40\u5B57\u4F53\u98CE\u683C",
-    control: "font",
-    bundle: ["--dsw-font-family"],
-    options: [
-      { label: "\u7CFB\u7EDF\u9ED8\u8BA4", value: "" },
-      { label: "\u886C\u7EBF", value: 'Georgia, "Songti SC", "SimSun", serif' },
-      { label: "\u5706\u4F53", value: '"Arial Rounded MT Bold", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif' },
-      { label: "\u7B49\u5BBD", value: '"JetBrains Mono", "SF Mono", Consolas, monospace' }
-    ]
-  },
-  // —— 交互反馈 ——
-  { id: "state-error", category: "feedback", name: "\u9519\u8BEF\u8272", description: "\u62A5\u9519\u4E0E\u5931\u8D25\u63D0\u793A", control: "color", bundle: ["--dsw-alias-state-error-primary"] },
-  { id: "state-warn", category: "feedback", name: "\u8B66\u544A\u8272", description: "\u8B66\u793A\u4E0E\u672A\u4FDD\u5B58\u63D0\u793A", control: "color", bundle: ["--dsw-alias-state-warn-primary"] },
-  { id: "state-success", category: "feedback", name: "\u6210\u529F\u8272", description: "\u6210\u529F\u63D0\u793A", control: "color", bundle: ["--dsw-alias-state-success-primary"] },
-  { id: "interactive-hover", category: "feedback", name: "\u60AC\u505C\u53CD\u9988", description: "\u53EF\u4EA4\u4E92\u5143\u7D20\u60AC\u505C\u5E95\u8272", control: "color", bundle: ["--dsw-alias-interactive-bg-hover"] },
-  // —— 布局与排版 ——
-  {
-    id: "layout-width",
-    category: "layout",
-    name: "\u5185\u5BB9\u5BBD\u5EA6",
-    description: "\u4F1A\u8BDD\u6B63\u6587\u6700\u5927\u5BBD\u5EA6",
-    control: "number",
-    bundle: ["--dsh-chat-content-width"],
-    fallback: { "--dsh-chat-content-width": { light: "748px", dark: "748px" } },
-    min: 640,
-    max: 1280,
-    step: 20,
-    unit: "px"
-  },
-  {
-    id: "shadow-level",
-    category: "layout",
-    name: "\u9634\u5F71\u6863",
-    description: "\u5361\u7247\u6D6E\u8D77\u9634\u5F71\u5F3A\u5EA6",
-    control: "select",
-    bundle: ["--dsw-shadow-lv2"],
-    options: [
-      { label: "\u65E0", value: "" },
-      { label: "\u67D4\u548C", value: "0 4px 12px 0 rgba(0, 0, 0, 0.02), 0 2px 8px 0 rgba(0, 0, 0, 0.04)" },
-      { label: "\u660E\u663E", value: "0 8px 24px 0 rgba(0, 0, 0, 0.08), 0 4px 12px 0 rgba(0, 0, 0, 0.12)" }
-    ]
-  }
-];
-
-// src/core/demo-data.ts
-var DEMO_DEFAULT_TOKENS = {
-  "--dsw-alias-bg-base": { light: "rgb(240, 248, 255)", dark: "rgb(6, 14, 30)" },
-  "--dsw-alias-bg-layer-1": { light: "rgb(255, 255, 255)", dark: "rgb(12, 22, 42)" },
-  "--dsw-alias-bg-layer-2": { light: "rgb(226, 241, 255)", dark: "rgb(18, 32, 58)" },
-  "--dsw-specific-sidebar-fill": { light: "rgb(230, 243, 255)", dark: "rgb(4, 10, 24)" },
-  "--dsw-specific-bubble": { light: "rgb(214, 235, 255)", dark: "rgb(14, 30, 56)" },
-  "--dsw-specific-bubble-highlight": { light: "rgb(178, 216, 255)", dark: "rgb(24, 48, 88)" },
-  "--dsw-specific-input-major": { light: "rgb(255, 255, 255)", dark: "rgb(10, 20, 40)" },
-  "--dsw-alias-brand-primary": { light: "rgb(0, 105, 255)", dark: "rgb(96, 160, 255)" },
-  "--dsw-alias-button-info-fill": { light: "rgb(0, 105, 255)", dark: "rgb(84, 150, 255)" },
-  "--dsw-alias-state-business-primary": { light: "rgb(0, 105, 255)", dark: "rgb(84, 150, 255)" },
-  "--dsw-specific-sidebar-nav-item-active": { light: "rgb(214, 232, 255)", dark: "rgb(18, 36, 70)" },
-  // #107：nav-item-active-accent 同时是「推荐徽标」底色（宿主 .badge 用它当 background、
-  // 用 button-info-fill 当文字色）——两者同色时徽标文字隐形（实测 1.0:1）。
-  // 这里刻意让「当底」的一侧足够极端（浅色几乎白 / 深色接近夜蓝）以保证文字可读；
-  // 单一取值无法同时满足明暗两侧 ≥4.5（浅色要 >235 级、深色要 <22 级）。
-  // 改动前为 rgb(0,105,255) / rgb(96,160,255)（与文字同色 → 徽标隐形）。
-  "--dsw-specific-sidebar-nav-item-active-accent": { light: "rgb(250, 252, 255)", dark: "rgb(18, 34, 64)" },
-  "--dsw-alias-label-primary": { light: "rgb(10, 32, 62)", dark: "rgb(232, 242, 255)" },
-  "--dsw-alias-label-secondary": { light: "rgb(66, 98, 140)", dark: "rgb(164, 186, 216)" },
-  "--dsw-alias-label-tertiary": { light: "rgb(86, 112, 150)", dark: "rgb(128, 152, 186)" }
-};
-function preset(id, name2, tokens, style) {
-  return {
-    schemaVersion: 1,
-    id,
-    name: name2,
-    author: { name: "wallpaper-plugin" },
-    edition: "standard",
-    targetDshVersion: "0.1.0-rc.5",
-    // #73 风格参考机制：style:xxx 标签供 preset_list/preset_get 输出，AI 可用作风范例引导
-    tags: style !== void 0 ? ["builtin", `style:${style}`] : ["builtin"],
-    tokens
-  };
-}
-var DEMO_PRESETS = [
-  // 默认出厂预设：海蓝色印象（亮 = 海面浅蓝/海雾白，暗 = 深海夜蓝），唯一出厂预设（#82/#95）
-  preset("default", "\u9ED8\u8BA4", DEMO_DEFAULT_TOKENS, "\u6D77\u6D0B\u6E05\u723D")
-];
-function isDemoPreset(id) {
-  return DEMO_PRESETS.some((preset2) => preset2.id === id);
-}
-
-// src/core/css-templates.ts
-var CSS_ANCHORS = [
-  { selector: "[data-chat-flow]", label: "\u4F1A\u8BDD\u533A\u80CC\u666F", note: "\u4F1A\u8BDD\u6D88\u606F\u6D41\u6574\u4F53\u80CC\u666F\uFF08\u6700\u5E38\u7528\uFF09" },
-  { selector: "[data-composer-seat]", label: "\u8F93\u5165\u533A\u5361\u7247", note: "\u5E95\u90E8\u8F93\u5165\u6846\u533A\u57DF" },
-  { selector: "[data-ds-dark-theme]", label: "\u6DF1\u8272\u6A21\u5F0F\u5FAE\u8C03", note: "\u6DF1\u8272\u6A21\u5F0F\u4E0B\u6574\u9875\uFF08html \u7EA7\u5C5E\u6027\u9009\u62E9\u5668\uFF09" },
-  { selector: "[data-conversation-scroll]", label: "\u6D88\u606F\u6EDA\u52A8\u533A", note: "\u4F1A\u8BDD\u6EDA\u52A8\u5BB9\u5668\uFF08scrollbar \u7B49\uFF09" }
-];
-
 // src/core/contrast.ts
 function parseRgbColor(value) {
   const str = value.trim();
-  const hex = /^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(str);
-  if (hex !== null) {
-    const h = hex[1];
+  const hex2 = /^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(str);
+  if (hex2 !== null) {
+    const h = hex2[1];
     if (h.length === 3 || h.length === 4) {
       const r = parseInt(h[0] + h[0], 16);
       const g = parseInt(h[1] + h[1], 16);
@@ -2090,6 +2032,573 @@ function contrastForValues(fg, bg) {
   const ratio = contrastRatio(f, b);
   return { ratio, grade: contrastGrade(ratio) };
 }
+
+// src/core/color-derive.ts
+function alphaOf(value) {
+  const m = /^\s*(?:rgba?|hsla?)\([^)]*[,/]\s*([\d.]+)\s*\)\s*$/i.exec(value.trim());
+  if (m === null) return 1;
+  const a = Number(m[1]);
+  return Number.isFinite(a) ? Math.min(1, Math.max(0, a)) : 1;
+}
+function fmt(n) {
+  return String(Math.round(n * 1e3) / 1e3);
+}
+function toCss(rgb, alpha) {
+  const hex2 = "#" + [rgb.r, rgb.g, rgb.b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
+  return alpha >= 0.999 ? hex2 : `rgba(${Math.round(rgb.r)}, ${Math.round(rgb.g)}, ${Math.round(rgb.b)}, ${fmt(alpha)})`;
+}
+function mixTo(rgb, target, amount) {
+  const t = Math.min(1, Math.max(0, amount));
+  return {
+    r: rgb.r + (target.r - rgb.r) * t,
+    g: rgb.g + (target.g - rgb.g) * t,
+    b: rgb.b + (target.b - rgb.b) * t
+  };
+}
+function deriveColor(base, mode, amount, scheme) {
+  const parsed = parseRgbColor(base);
+  if (parsed === null) return base;
+  const alpha = alphaOf(base);
+  if (mode === "alpha") return toCss(parsed, Math.min(1, Math.max(0, amount)));
+  const target = mode === "lighter" ? { r: 255, g: 255, b: 255 } : mode === "darker" ? { r: 0, g: 0, b: 0 } : scheme === "light" ? { r: 0, g: 0, b: 0 } : { r: 255, g: 255, b: 255 };
+  return toCss(mixTo(parsed, target, amount), alpha);
+}
+function deriveFromBase(base, rule, scheme) {
+  if (rule === void 0 || base === "") return base;
+  const amount = scheme === "dark" && rule.amountDark !== void 0 ? rule.amountDark : rule.amount;
+  return deriveColor(base, rule.mode, amount, scheme);
+}
+
+// src/core/knobs.ts
+var KNOB_CATEGORIES = [
+  { id: "spatial", name: "\u7A7A\u95F4\u5B9A\u4F4D", description: "\u754C\u9762\u5404\u533A\u57DF\u7684\u5E95\u8272\u4E0E\u6D6E\u5C42" },
+  { id: "layers", name: "\u80CC\u666F\u5C42\u6B21", description: "\u8FB9\u6846\u4E0E\u5206\u9694" },
+  { id: "accent", name: "\u5F3A\u8C03\u8272", description: "\u54C1\u724C\u4E0E\u4E3B\u64CD\u4F5C" },
+  { id: "text", name: "\u6587\u5B57\u53EF\u8BFB\u6027", description: "\u6587\u5B57\u989C\u8272\u4E0E\u5B57\u4F53" },
+  { id: "feedback", name: "\u4EA4\u4E92\u53CD\u9988", description: "\u72B6\u6001\u4E0E\u60AC\u505C" },
+  { id: "layout", name: "\u5E03\u5C40\u4E0E\u6392\u7248", description: "\u5BBD\u5EA6\u3001\u5706\u89D2\u3001\u52A8\u6548\u4E0E\u9634\u5F71" }
+];
+var RADIUS_TOKENS = ["--dsw-radius-xs", "--dsw-radius-sm", "--dsw-radius-md", "--dsw-radius-lg", "--dsw-radius-xl", "--dsw-radius-panel"];
+function radiusOption(label, xs, sm, md, lg, xl, panel) {
+  return {
+    label,
+    value: label,
+    values: {
+      "--dsw-radius-xs": xs,
+      "--dsw-radius-sm": sm,
+      "--dsw-radius-md": md,
+      "--dsw-radius-lg": lg,
+      "--dsw-radius-xl": xl,
+      "--dsw-radius-panel": panel
+    }
+  };
+}
+var KNOBS = [
+  // —— 空间定位（界面分区底色） ——
+  { id: "spatial-bg", category: "spatial", name: "\u80CC\u666F", description: "\u6574\u4E2A\u754C\u9762\u7684\u5E95\u8272\uFF0C\u6700\u5F71\u54CD\u89C2\u611F", control: "color", bundle: ["--dsw-alias-bg-base"] },
+  {
+    id: "spatial-layer",
+    category: "spatial",
+    name: "\u62AC\u5347\u9762",
+    description: "\u5361\u7247\u3001\u8F93\u5165\u6846\u3001\u5F39\u5C42\u6D6E\u51FA\u7684\u5C42\u6B21\u8272\uFF08\u81EA\u52A8\u751F\u6210\u4E24\u7EA7\u9636\u68AF\uFF09",
+    control: "color",
+    bundle: ["--dsw-alias-bg-layer-1", "--dsw-alias-bg-layer-2", "--dsw-alias-bg-layer-3"],
+    derives: {
+      "--dsw-alias-bg-layer-2": { mode: "shade", amount: 0.1 },
+      "--dsw-alias-bg-layer-3": { mode: "shade", amount: 0.18 }
+    }
+  },
+  { id: "spatial-sidebar", category: "spatial", name: "\u4FA7\u8FB9\u680F", description: "\u5DE6\u4FA7\u5BFC\u822A\u680F\u80CC\u666F", control: "color", bundle: ["--dsw-specific-sidebar-fill"] },
+  { id: "spatial-bubble", category: "spatial", name: "\u5BF9\u8BDD\u6C14\u6CE1", description: "\u4F1A\u8BDD\u533A\u6D88\u606F\u6C14\u6CE1\u5E95\u8272", control: "color", bundle: ["--dsw-specific-bubble"] },
+  { id: "spatial-input", category: "spatial", name: "\u8F93\u5165\u6846", description: "\u5E95\u90E8\u8F93\u5165\u5361\u5E95\u8272", control: "color", bundle: ["--dsw-specific-input-major"] },
+  {
+    id: "spatial-menu",
+    category: "spatial",
+    name: "\u83DC\u5355\u4E0E\u60AC\u6D6E\u5C42",
+    description: "\u83DC\u5355\u3001\u63D0\u793A\u3001\u9009\u62E9\u5668\u3001\u906E\u7F69\uFF08\u81EA\u52A8\u5206\u5C42\uFF09",
+    control: "color",
+    bundle: ["--dsw-specific-menu", "--dsw-specific-tip", "--dsw-specific-selector", "--dsw-alias-bg-overlay"],
+    derives: {
+      "--dsw-specific-tip": { mode: "shade", amount: 0.04 },
+      "--dsw-specific-selector": { mode: "shade", amount: 0.08 },
+      "--dsw-alias-bg-overlay": { mode: "alpha", amount: 0.6 }
+    }
+  },
+  // —— 背景层次（边框与分隔） ——
+  { id: "border-level", category: "layers", name: "\u8FB9\u6846\u6DF1\u6D45", description: "\u5361\u7247\u4E0E\u5206\u533A\u7684\u4E00\u7EA7\u8FB9\u6846\uFF08\u7EC6\u5206\u7559\u9AD8\u7EA7\u4EE4\u724C\uFF09", control: "color", bundle: ["--dsw-alias-border-l2"] },
+  // —— 强调色（品牌与主操作） ——
+  { id: "accent-brand", category: "accent", name: "\u4E3B\u8272", description: "\u54C1\u724C\u4E3B\u8272\u3001\u4E3B\u6309\u94AE\u3001\u4E1A\u52A1\u72B6\u6001\u4E00\u6B21\u5168\u6539", control: "color", bundle: ["--dsw-alias-brand-primary", "--dsw-alias-button-info-fill", "--dsw-alias-state-business-primary"] },
+  { id: "accent-hover", category: "accent", name: "\u60AC\u505C\u8272", description: "\u4E3B\u6309\u94AE\u60AC\u505C\u53CD\u9988", control: "color", bundle: ["--dsw-alias-button-info-hover"] },
+  {
+    id: "button-family",
+    category: "accent",
+    name: "\u6309\u94AE\u5BB6\u65CF",
+    description: "\u4E3B\u6309\u94AE/\u4FE1\u606F\u6309\u94AE/\u4E1A\u52A1\u72B6\u6001 + \u60AC\u505C\u6001\uFF08\u60AC\u505C\u81EA\u52A8\u52A0\u6DF1\u6216\u63D0\u4EAE\uFF09",
+    control: "color",
+    bundle: [
+      "--dsw-alias-button-primary-fill",
+      "--dsw-alias-button-info-fill",
+      "--dsw-alias-state-business-primary",
+      "--dsw-alias-button-primary-hover",
+      "--dsw-alias-button-info-hover"
+    ],
+    derives: {
+      "--dsw-alias-button-primary-hover": { mode: "shade", amount: 0.18 },
+      "--dsw-alias-button-info-hover": { mode: "shade", amount: 0.18 }
+    }
+  },
+  // —— 文字可读性 ——
+  { id: "text-primary", category: "text", name: "\u4E3B\u6587\u5B57", description: "\u6B63\u6587\u4E0E\u6807\u9898\u8272", control: "color", bundle: ["--dsw-alias-label-primary"] },
+  { id: "text-secondary", category: "text", name: "\u6B21\u8981\u6587\u5B57", description: "\u63CF\u8FF0\u4E0E\u8BF4\u660E\u6587\u5B57\u8272", control: "color", bundle: ["--dsw-alias-label-secondary"] },
+  { id: "text-tertiary", category: "text", name: "\u8F85\u52A9\u6587\u5B57", description: "\u5F31\u5316\u4E0E\u5360\u4F4D\u6587\u5B57\u8272", control: "color", bundle: ["--dsw-alias-label-tertiary"] },
+  {
+    id: "font-family",
+    category: "text",
+    name: "\u5B57\u4F53\u6863",
+    description: "\u5168\u5C40\u5B57\u4F53\u98CE\u683C",
+    control: "font",
+    bundle: ["--dsw-font-family"],
+    options: [
+      { label: "\u7CFB\u7EDF\u9ED8\u8BA4", value: "" },
+      { label: "\u886C\u7EBF", value: 'Georgia, "Songti SC", "SimSun", serif' },
+      { label: "\u5706\u4F53", value: '"Arial Rounded MT Bold", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif' },
+      { label: "\u7B49\u5BBD", value: '"JetBrains Mono", "SF Mono", Consolas, monospace' }
+    ]
+  },
+  // —— 交互反馈 ——
+  { id: "state-error", category: "feedback", name: "\u9519\u8BEF\u8272", description: "\u62A5\u9519\u4E0E\u5931\u8D25\u63D0\u793A", control: "color", bundle: ["--dsw-alias-state-error-primary"] },
+  { id: "state-warn", category: "feedback", name: "\u8B66\u544A\u8272", description: "\u8B66\u793A\u4E0E\u672A\u4FDD\u5B58\u63D0\u793A", control: "color", bundle: ["--dsw-alias-state-warn-primary"] },
+  { id: "state-success", category: "feedback", name: "\u6210\u529F\u8272", description: "\u6210\u529F\u63D0\u793A", control: "color", bundle: ["--dsw-alias-state-success-primary"] },
+  { id: "interactive-hover", category: "feedback", name: "\u60AC\u505C\u53CD\u9988", description: "\u53EF\u4EA4\u4E92\u5143\u7D20\u60AC\u505C\u5E95\u8272", control: "color", bundle: ["--dsw-alias-interactive-bg-hover"] },
+  // —— 布局与排版（#111 新增：圆角/形状/毛玻璃/动效/阴影/代码面） ——
+  {
+    id: "radius-scale",
+    category: "layout",
+    name: "\u5706\u89D2\u6863",
+    description: "\u5168\u5C40\u5706\u89D2\u5927\u5C0F\uFF08\u6309\u94AE/\u83DC\u5355/\u5F39\u5C42\u4E00\u8D77\u53D8\uFF09",
+    control: "select",
+    bundle: RADIUS_TOKENS,
+    options: [
+      radiusOption("\u76F4\u89D2", "0px", "0px", "1px", "2px", "2px", "4px"),
+      radiusOption("\u5FAE\u5706", "2px", "4px", "6px", "8px", "10px", "12px"),
+      radiusOption("\u6807\u51C6", "4px", "8px", "12px", "16px", "20px", "28px"),
+      radiusOption("\u5927\u5706", "8px", "14px", "20px", "26px", "32px", "40px"),
+      radiusOption("\u80F6\u56CA", "12px", "18px", "24px", "30px", "36px", "44px")
+    ]
+  },
+  {
+    id: "corner-shape",
+    category: "layout",
+    name: "\u5706\u89D2\u5F62\u72B6",
+    description: "\u5E72\u51C0\u5706\u89D2 vs \u679C\u51BB\u65B9\u611F\uFF08superellipse\uFF09",
+    control: "select",
+    bundle: ["--dsw-corner-shape"],
+    options: [
+      { label: "\u6807\u51C6\u5706\u89D2", value: "round" },
+      { label: "\u679C\u51BB\u65B9\u611F", value: "superellipse(1.5)" }
+    ]
+  },
+  {
+    id: "mask-blur",
+    category: "layout",
+    name: "\u6BDB\u73BB\u7483\u5F3A\u5EA6",
+    description: "\u5F39\u5C42\u906E\u7F69\u7684\u6A21\u7CCA\u7A0B\u5EA6",
+    control: "select",
+    bundle: ["--dsw-mask-blur"],
+    options: [
+      { label: "\u5173\u95ED", value: "none" },
+      { label: "\u8F7B", value: "blur(2px)" },
+      { label: "\u5F3A", value: "blur(8px)" },
+      { label: "\u6781\u5F3A", value: "blur(16px)" }
+    ]
+  },
+  {
+    id: "motion-speed",
+    category: "layout",
+    name: "\u52A8\u6548\u6863",
+    description: "\u5168\u5C40\u8FC7\u6E21\u901F\u5EA6\uFF08\u60AC\u505C/\u5C55\u5F00/\u5F39\u5C42\uFF09",
+    control: "select",
+    bundle: ["--ds-transition-duration", "--ds-transition-duration-fast", "--ds-transition-duration-slow"],
+    options: [
+      { label: "\u5E72\u8106", value: "snappy", values: { "--ds-transition-duration": "0.12s", "--ds-transition-duration-fast": "0.06s", "--ds-transition-duration-slow": "0.2s" } },
+      { label: "\u6807\u51C6", value: "normal", values: { "--ds-transition-duration": "0.2s", "--ds-transition-duration-fast": "0.1s", "--ds-transition-duration-slow": "0.3s" } },
+      { label: "\u8212\u7F13", value: "slow", values: { "--ds-transition-duration": "0.32s", "--ds-transition-duration-fast": "0.16s", "--ds-transition-duration-slow": "0.48s" } }
+    ]
+  },
+  {
+    id: "shadow-level",
+    category: "layout",
+    name: "\u9634\u5F71\u6863",
+    description: "\u5361\u7247\u6D6E\u8D77\u9634\u5F71\u5F3A\u5EA6\uFF08\u4E09\u6863\u9634\u5F71\u4E00\u8D77\u7F29\u653E\uFF09",
+    control: "select",
+    bundle: ["--dsw-shadow-lv2", "--dsw-shadow-lv1", "--dsw-shadow-lv3"],
+    options: [
+      { label: "\u65E0", value: "none", values: { "--dsw-shadow-lv1": "none", "--dsw-shadow-lv2": "none", "--dsw-shadow-lv3": "none" } },
+      {
+        label: "\u67D4\u548C",
+        value: "soft",
+        // 与目录默认值逐字一致——回读（tokensToKnobValue）才能认出「当前就是柔和档」
+        values: {
+          "--dsw-shadow-lv1": "0 2px 4px 0 rgba(0, 0, 0, 0.05)",
+          "--dsw-shadow-lv2": "0 4px 12px 0 rgba(0, 0, 0, 0.02), 0 2px 8px 0 rgba(0, 0, 0, 0.04)",
+          "--dsw-shadow-lv3": "0 0 1px 0 rgba(0, 0, 0, 0.2), 0 0 4px 0 rgba(0, 0, 0, 0.02), 0 12px 32px 0 rgba(0, 0, 0, 0.08)"
+        }
+      },
+      {
+        label: "\u660E\u663E",
+        value: "strong",
+        values: {
+          "--dsw-shadow-lv1": "0 2px 6px 0 rgba(0, 0, 0, 0.08)",
+          "--dsw-shadow-lv2": "0 8px 24px 0 rgba(0, 0, 0, 0.12), 0 4px 12px 0 rgba(0, 0, 0, 0.1)",
+          "--dsw-shadow-lv3": "0 16px 40px 0 rgba(0, 0, 0, 0.18)"
+        }
+      }
+    ]
+  },
+  {
+    id: "settings-card",
+    category: "spatial",
+    name: "\u8BBE\u7F6E\u5361\u9762",
+    description: "\u8BBE\u7F6E\u9762\u677F\u5361\u7247\u5E95\u8272\u4E0E\u63CF\u8FB9",
+    control: "color",
+    bundle: ["--dsw-alias-settings-card-fill", "--dsw-alias-settings-card-stroke"],
+    derives: { "--dsw-alias-settings-card-stroke": { mode: "alpha", amount: 0.14 } }
+  },
+  {
+    id: "markdown-surfaces",
+    category: "spatial",
+    name: "\u4EE3\u7801\u4E0E\u5F15\u7528\u9762",
+    description: "\u4EE3\u7801\u5757/\u884C\u5185\u4EE3\u7801/\u5F15\u7528/\u6807\u7B7E\u5E95\u8272\uFF08\u81EA\u52A8\u5206\u5C42\uFF09",
+    control: "color",
+    bundle: [
+      "--dsw-alias-markdown-code-block",
+      "--dsw-alias-markdown-code-block-banner",
+      "--dsw-alias-markdown-inline-code",
+      "--dsw-alias-markdown-citation",
+      "--dsw-alias-markdown-tag"
+    ],
+    derives: {
+      "--dsw-alias-markdown-code-block-banner": { mode: "shade", amount: 0.04 },
+      "--dsw-alias-markdown-inline-code": { mode: "shade", amount: 0.08 },
+      "--dsw-alias-markdown-citation": { mode: "shade", amount: 0.03 },
+      "--dsw-alias-markdown-tag": { mode: "shade", amount: 0.06 }
+    }
+  },
+  {
+    id: "overlay-surfaces",
+    category: "spatial",
+    name: "\u63D0\u793A\u4E0E\u6D6E\u5C42",
+    description: "\u8F7B\u63D0\u793A\uFF08toast\uFF09\u4E0E\u60AC\u505C\u63D0\u793A\uFF08tooltip\uFF09\u5E95\u8272",
+    control: "color",
+    bundle: ["--dsw-alias-toast-bg", "--dsw-alias-tooltip-bg"],
+    derives: { "--dsw-alias-tooltip-bg": { mode: "shade", amount: 0.04 } }
+  },
+  {
+    id: "layout-width",
+    category: "layout",
+    name: "\u5185\u5BB9\u5BBD\u5EA6",
+    description: "\u4F1A\u8BDD\u6B63\u6587\u6700\u5927\u5BBD\u5EA6",
+    control: "number",
+    bundle: ["--dsh-chat-content-width"],
+    fallback: { "--dsh-chat-content-width": { light: "748px", dark: "748px" } },
+    min: 640,
+    max: 1280,
+    step: 20,
+    unit: "px"
+  }
+];
+function findKnob(id) {
+  return KNOBS.find((knob) => knob.id === id);
+}
+function valueForToken(knob, token, base, scheme) {
+  if (token === knob.bundle[0]) return base;
+  return deriveFromBase(base, knob.derives?.[token], scheme);
+}
+function knobValueForScheme(knobId, value, scheme) {
+  const knob = findKnob(knobId);
+  const out = {};
+  if (knob === void 0) return out;
+  const option = knob.options?.find((o) => o.values !== void 0 && (o.value === value || o.label === value));
+  if (option?.values !== void 0) {
+    for (const [token, v] of Object.entries(option.values)) {
+      out[token] = scheme === null ? { light: v, dark: v } : { [scheme]: v };
+    }
+    return out;
+  }
+  for (const token of knob.bundle) {
+    if (scheme === null) {
+      out[token] = {
+        light: valueForToken(knob, token, value, "light"),
+        dark: valueForToken(knob, token, value, "dark")
+      };
+    } else {
+      out[token] = { [scheme]: valueForToken(knob, token, value, scheme) };
+    }
+  }
+  return out;
+}
+function knobValuesForSchemes(knobId, value) {
+  if (typeof value === "string") {
+    const single = knobValueForScheme(knobId, value, null);
+    const out2 = {};
+    for (const [token, partial] of Object.entries(single)) {
+      out2[token] = {
+        light: partial.light ?? "",
+        dark: partial.dark ?? ""
+      };
+    }
+    return out2;
+  }
+  const lightPart = knobValueForScheme(knobId, value.light, "light");
+  const darkPart = knobValueForScheme(knobId, value.dark, "dark");
+  const out = {};
+  for (const token of /* @__PURE__ */ new Set([...Object.keys(lightPart), ...Object.keys(darkPart)])) {
+    out[token] = {
+      light: lightPart[token]?.light ?? "",
+      dark: darkPart[token]?.dark ?? ""
+    };
+  }
+  return out;
+}
+
+// src/core/demo-data.ts
+var DEMO_DEFAULT_TOKENS = {
+  "--dsw-alias-bg-base": { light: "rgb(240, 248, 255)", dark: "rgb(6, 14, 30)" },
+  "--dsw-alias-bg-layer-1": { light: "rgb(255, 255, 255)", dark: "rgb(12, 22, 42)" },
+  "--dsw-alias-bg-layer-2": { light: "rgb(226, 241, 255)", dark: "rgb(18, 32, 58)" },
+  "--dsw-specific-sidebar-fill": { light: "rgb(230, 243, 255)", dark: "rgb(4, 10, 24)" },
+  "--dsw-specific-bubble": { light: "rgb(214, 235, 255)", dark: "rgb(14, 30, 56)" },
+  "--dsw-specific-bubble-highlight": { light: "rgb(178, 216, 255)", dark: "rgb(24, 48, 88)" },
+  "--dsw-specific-input-major": { light: "rgb(255, 255, 255)", dark: "rgb(10, 20, 40)" },
+  "--dsw-alias-brand-primary": { light: "rgb(0, 105, 255)", dark: "rgb(96, 160, 255)" },
+  "--dsw-alias-button-info-fill": { light: "rgb(0, 105, 255)", dark: "rgb(84, 150, 255)" },
+  "--dsw-alias-state-business-primary": { light: "rgb(0, 105, 255)", dark: "rgb(84, 150, 255)" },
+  "--dsw-specific-sidebar-nav-item-active": { light: "rgb(214, 232, 255)", dark: "rgb(18, 36, 70)" },
+  // #107：nav-item-active-accent 同时是「推荐徽标」底色（宿主 .badge 用它当 background、
+  // 用 button-info-fill 当文字色）——两者同色时徽标文字隐形（实测 1.0:1）。
+  // 这里刻意让「当底」的一侧足够极端（浅色几乎白 / 深色接近夜蓝）以保证文字可读；
+  // 单一取值无法同时满足明暗两侧 ≥4.5（浅色要 >235 级、深色要 <22 级）。
+  // 改动前为 rgb(0,105,255) / rgb(96,160,255)（与文字同色 → 徽标隐形）。
+  "--dsw-specific-sidebar-nav-item-active-accent": { light: "rgb(250, 252, 255)", dark: "rgb(18, 34, 64)" },
+  "--dsw-alias-label-primary": { light: "rgb(10, 32, 62)", dark: "rgb(232, 242, 255)" },
+  "--dsw-alias-label-secondary": { light: "rgb(66, 98, 140)", dark: "rgb(164, 186, 216)" },
+  "--dsw-alias-label-tertiary": { light: "rgb(86, 112, 150)", dark: "rgb(128, 152, 186)" }
+};
+function preset(id, name2, tokens, style) {
+  return {
+    schemaVersion: 1,
+    id,
+    name: name2,
+    author: { name: "wallpaper-plugin" },
+    edition: "standard",
+    targetDshVersion: "0.1.0-rc.5",
+    // #73 风格参考机制：style:xxx 标签供 preset_list/preset_get 输出，AI 可用作风范例引导
+    tags: style !== void 0 ? ["builtin", `style:${style}`] : ["builtin"],
+    tokens
+  };
+}
+var DEMO_PRESETS = [
+  // 默认出厂预设：海蓝色印象（亮 = 海面浅蓝/海雾白，暗 = 深海夜蓝），唯一出厂预设（#82/#95）
+  preset("default", "\u9ED8\u8BA4", DEMO_DEFAULT_TOKENS, "\u6D77\u6D0B\u6E05\u723D")
+];
+function isDemoPreset(id) {
+  return DEMO_PRESETS.some((preset2) => preset2.id === id);
+}
+
+// src/core/catalog-relations.ts
+var TOKEN_RELATIONS = {
+  "--dsw-alias-bg-base": { affects: "\u6574\u4E2A\u754C\u9762\u5E95\u8272\uFF08\u542B\u6EDA\u52A8\u533A\uFF09", pairs: ["--dsw-alias-label-primary", "--dsw-alias-bg-layer-1"] },
+  "--dsw-alias-bg-layer-1": { affects: "\u5361\u7247/\u8F93\u5165\u5361/\u6D6E\u5C42\u6D45\u5C42", pairs: ["--dsw-alias-bg-layer-2"] },
+  "--dsw-alias-bg-layer-2": { affects: "\u5F39\u5C42/\u83DC\u5355/\u8BBE\u7F6E\u9762\u677F", pairs: ["--dsw-alias-bg-layer-1"] },
+  "--dsw-alias-bg-layer-3": { affects: "\u5D4C\u5957\u5361\u7247\u4E0E\u9AD8\u5C42\u6D6E\u5C42", pairs: ["--dsw-alias-bg-layer-2"] },
+  "--dsw-specific-sidebar-fill": { affects: "\u5DE6\u4FA7\u5BFC\u822A\u680F\u6574\u6761\u80CC\u666F", pairs: ["--dsw-specific-sidebar-nav-item-active"] },
+  "--dsw-specific-sidebar-nav-item-active": { affects: "\u4FA7\u680F\u5F53\u524D\u9009\u4E2D\u9879\u5E95\u8272" },
+  "--dsw-specific-sidebar-nav-item-active-accent": { affects: "\u4FA7\u680F\u6FC0\u6D3B\u5F3A\u8C03 + \u63D0\u95EE\u5361\u300C\u63A8\u8350\u300D\u5FBD\u6807\u5E95\u8272", pairs: ["--dsw-alias-button-info-fill"] },
+  "--dsw-specific-bubble": { affects: "\u4F1A\u8BDD\u6D88\u606F\u6C14\u6CE1\u5E95\u8272" },
+  "--dsw-specific-input-major": { affects: "\u5E95\u90E8\u8F93\u5165\u6846\u533A\u57DF\u5E95\u8272" },
+  "--dsw-alias-label-primary": { affects: "\u6B63\u6587/\u6807\u9898/\u6309\u94AE\u6587\u5B57\uFF08\u5927\u9762\u79EF\u6587\u5B57\uFF09", pairs: ["--dsw-alias-bg-base"] },
+  "--dsw-alias-label-secondary": { affects: "\u63CF\u8FF0\u3001\u6B21\u7EA7\u4FE1\u606F" },
+  "--dsw-alias-label-tertiary": { affects: "\u5360\u4F4D\u3001\u8F85\u52A9\u8BF4\u660E\uFF08\u5C0F\u5B57\uFF0C\u6CE8\u610F\u5BF9\u6BD4\u5EA6\uFF09" },
+  "--dsw-alias-label-primary-foreground": { affects: "\u6DF1\u8272\u6309\u94AE/Tag \u4E0A\u7684\u6587\u5B57", pairs: ["--dsw-alias-button-primary-fill", "--dsw-alias-button-info-fill"] },
+  "--dsw-alias-brand-primary": { affects: "\u54C1\u724C\u8272\uFF1A\u94FE\u63A5\u3001\u56FE\u6807\u5F3A\u8C03\u3001\u4E3B\u6309\u94AE", pairs: ["--dsw-alias-button-info-fill", "--dsw-alias-state-business-primary"] },
+  "--dsw-alias-button-info-fill": { affects: "\u4E3B\u8981\u6309\u94AE\u586B\u5145 + \u63A8\u8350\u5FBD\u6807\u6587\u5B57\u8272" },
+  "--dsw-alias-button-primary-fill": { affects: "\u6DF1\u8272\u5B9E\u5FC3\u6309\u94AE\u586B\u5145" },
+  "--dsw-alias-border-l2": { affects: "\u5361\u7247/\u5206\u9694\u7EBF\u4E00\u7EA7\u8FB9\u6846\uFF08\u6700\u5E38\u7528\uFF09" },
+  "--dsw-alias-state-error-primary": { affects: "\u62A5\u9519/\u5931\u8D25\u63D0\u793A" },
+  "--dsw-alias-state-warn-primary": { affects: "\u8B66\u544A/\u672A\u4FDD\u5B58\u63D0\u793A" },
+  "--dsw-alias-state-success-primary": { affects: "\u6210\u529F\u63D0\u793A" },
+  "--dsw-alias-markdown-code-block": { affects: "\u5BF9\u8BDD\u91CC\u7684\u4EE3\u7801\u5757\u5E95\u8272", pairs: ["--dsw-alias-markdown-inline-code"] },
+  "--dsw-alias-markdown-inline-code": { affects: "\u884C\u5185\u4EE3\u7801\u5E95\u8272" },
+  "--dsw-alias-toast-bg": { affects: "\u53F3\u4E0A\u89D2\u8F7B\u63D0\u793A\u5E95\u8272", pairs: ["--dsw-alias-toast-label"] },
+  "--dsw-alias-tooltip-bg": { affects: "\u60AC\u505C\u63D0\u793A\uFF08tooltip\uFF09\u5E95\u8272" },
+  "--dsw-alias-settings-card-fill": { affects: "\u8BBE\u7F6E\u9762\u677F\u5361\u7247\u5E95\u8272", pairs: ["--dsw-alias-settings-card-stroke"] },
+  "--dsw-alias-settings-card-stroke": { affects: "\u8BBE\u7F6E\u9762\u677F\u5361\u7247\u63CF\u8FB9" },
+  "--dsw-radius-md": { affects: "\u6309\u94AE/\u83DC\u5355\u5706\u89D2\uFF08\u5168\u5C40\u89C2\u611F\uFF09", pairs: ["--dsw-radius-lg", "--dsw-radius-panel"] },
+  "--dsw-radius-panel": { affects: "\u5F39\u5C42\u9762\u677F\u5706\u89D2\uFF08\u6700\u663E\u773C\u7684\u5927\u5706\u89D2\uFF09" },
+  "--dsw-corner-shape": { affects: "\u6574\u4F53\u300C\u5706\u89D2\u5F62\u72B6\u300D\uFF1A\u5E72\u51C0\u5706\u89D2 vs \u679C\u51BB\u65B9\u611F" },
+  "--ds-transition-duration": { affects: "\u5168\u5C40\u8FC7\u6E21\u901F\u5EA6\uFF08\u60AC\u505C/\u5C55\u5F00/\u5F39\u5C42\uFF09" },
+  "--dsw-mask-blur": { affects: "\u5F39\u5C42\u906E\u7F69\u7684\u6BDB\u73BB\u7483\u5F3A\u5EA6" },
+  "--dsw-font-family": { affects: "\u5168\u5C40\u5B57\u4F53\u65CF\uFF08\u6B63\u6587\u4E0E\u754C\u9762\uFF09" },
+  "--dsh-chat-content-width": { affects: "\u4F1A\u8BDD\u6B63\u6587\u6700\u5927\u5BBD\u5EA6\uFF08\u9605\u8BFB\u5BC6\u5EA6\uFF09" }
+};
+function tokenRelation(name2) {
+  return TOKEN_RELATIONS[name2];
+}
+
+// src/core/palette.ts
+var PALETTE_MOODS = [
+  { id: "fresh", name: "\u6E05\u723D", description: "\u9AD8\u660E\u5EA6\u6D45\u5E95 + \u6E05\u900F\u54C1\u724C\u8272\uFF08\u9ED8\u8BA4\uFF09" },
+  { id: "night", name: "\u6DF1\u591C", description: "\u6DF1\u5E95 + \u9AD8\u9971\u548C\u54C1\u724C\u8272\uFF0C\u6697\u8272\u4FA7\u66F4\u6DF1" },
+  { id: "retro", name: "\u590D\u53E4", description: "\u6696\u8C03\u7C73\u767D\u5E95 + \u4F4E\u9971\u548C\u54C1\u724C\u8272" },
+  { id: "mono", name: "\u6781\u7B80", description: "\u8FD1\u4E4E\u65E0\u5F69\u7684\u7070\u9636 + \u5355\u70B9\u54C1\u724C\u8272" }
+];
+function rgbToHsl(rgb) {
+  const r = rgb.r / 255, g = rgb.g / 255, b = rgb.b / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l: l * 100 };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+  else if (max === g) h = ((b - r) / d + 2) / 6;
+  else h = ((r - g) / d + 4) / 6;
+  return { h: h * 360, s: s * 100, l: l * 100 };
+}
+function hslToRgb2(h, s, l) {
+  const sn = Math.min(100, Math.max(0, s)) / 100;
+  const ln = Math.min(100, Math.max(0, l)) / 100;
+  const c = (1 - Math.abs(2 * ln - 1)) * sn;
+  const hp = (h % 360 + 360) % 360 / 60;
+  const x = c * (1 - Math.abs(hp % 2 - 1));
+  let rgb;
+  if (hp < 1) rgb = [c, x, 0];
+  else if (hp < 2) rgb = [x, c, 0];
+  else if (hp < 3) rgb = [0, c, x];
+  else if (hp < 4) rgb = [0, x, c];
+  else if (hp < 5) rgb = [x, 0, c];
+  else rgb = [c, 0, x];
+  const m = ln - c / 2;
+  return {
+    r: Math.round((rgb[0] + m) * 255),
+    g: Math.round((rgb[1] + m) * 255),
+    b: Math.round((rgb[2] + m) * 255)
+  };
+}
+function hex(rgb) {
+  return "#" + [rgb.r, rgb.g, rgb.b].map((v) => Math.min(255, Math.max(0, Math.round(v))).toString(16).padStart(2, "0")).join("");
+}
+function rgba(rgb, alpha) {
+  return `rgba(${Math.round(rgb.r)}, ${Math.round(rgb.g)}, ${Math.round(rgb.b)}, ${String(Math.round(alpha * 1e3) / 1e3)})`;
+}
+function tone(saturation, lightness, hue) {
+  return hslToRgb2(hue, saturation, lightness);
+}
+function ensureContrast(fg, bg, target, direction) {
+  let hsl = rgbToHsl(fg);
+  let current = fg;
+  for (let i = 0; i < 30; i += 1) {
+    if (contrastRatio(current, bg) >= target) return current;
+    hsl = { ...hsl, l: Math.min(100, Math.max(0, hsl.l + (direction === "darker" ? -2.5 : 2.5))) };
+    current = hslToRgb2(hsl.h, hsl.s, hsl.l);
+  }
+  return current;
+}
+function foregroundOn(brand, target) {
+  const white = { r: 255, g: 255, b: 255 };
+  const ink = { r: 12, g: 8, b: 20 };
+  const whiteRatio = contrastRatio(white, brand);
+  const inkRatio = contrastRatio(ink, brand);
+  if (whiteRatio >= target) return "#ffffff";
+  if (inkRatio >= target) return hex(ink);
+  return whiteRatio >= inkRatio ? "#ffffff" : hex(ink);
+}
+function paletteTokens(seed, mood = "fresh", contrast = "AA") {
+  const seedRgb = parseRgbColor(seed);
+  if (seedRgb === null) throw new Error(`preset_palette: seed \u4E0D\u662F\u5408\u6CD5\u989C\u8272\uFF08${seed}\uFF09`);
+  const target = contrast === "AAA" ? 7 : 4.5;
+  const base = rgbToHsl(seedRgb);
+  const profile = mood === "night" ? { hue: base.h, sat: Math.min(96, base.s + 12), lightL: 96.5, darkL: 6, tint: 8 } : mood === "retro" ? { hue: (base.h + 10) % 360, sat: Math.min(72, Math.max(18, base.s * 0.72)), lightL: 96, darkL: 12, tint: 9 } : mood === "mono" ? { hue: base.h, sat: Math.min(12, base.s), lightL: 97, darkL: 9, tint: 4 } : { hue: base.h, sat: Math.min(88, Math.max(24, base.s)), lightL: 97, darkL: 8, tint: 7 };
+  const brandLightL = Math.min(58, Math.max(30, base.l));
+  const brandDarkL = Math.min(78, Math.max(52, base.l + 8));
+  const brandLight = tone(profile.sat, brandLightL, profile.hue);
+  const brandDark = tone(Math.min(92, profile.sat + 6), brandDarkL, profile.hue);
+  const lightBg = tone(profile.tint, profile.lightL, profile.hue);
+  const darkBg = tone(profile.sat * 0.5, profile.darkL, profile.hue);
+  const lightLayer1 = tone(profile.tint * 0.5, 100, profile.hue);
+  const lightLayer2 = tone(profile.tint * 1.4, profile.lightL - 3, profile.hue);
+  const lightLayer3 = tone(profile.tint * 1.8, profile.lightL - 6, profile.hue);
+  const darkLayer1 = tone(profile.sat * 0.45, profile.darkL + 4, profile.hue);
+  const darkLayer2 = tone(profile.sat * 0.5, profile.darkL + 7, profile.hue);
+  const darkLayer3 = tone(profile.sat * 0.55, profile.darkL + 10, profile.hue);
+  const lightInkSeed = tone(profile.sat * 0.6, 18, profile.hue);
+  const darkInkSeed = tone(Math.min(60, profile.sat * 0.4), 92, profile.hue);
+  const lightPrimary = ensureContrast(lightInkSeed, lightBg, target, "darker");
+  const darkPrimary = ensureContrast(darkInkSeed, darkBg, target, "lighter");
+  const lightSecondary = ensureContrast(tone(profile.sat * 0.45, 36, profile.hue), lightBg, target, "darker");
+  const darkSecondary = ensureContrast(tone(Math.min(50, profile.sat * 0.35), 78, profile.hue), darkBg, target, "lighter");
+  const lightTertiary = ensureContrast(tone(profile.sat * 0.35, 48, profile.hue), lightBg, Math.max(4.5, target - 0.5), "darker");
+  const darkTertiary = ensureContrast(tone(Math.min(40, profile.sat * 0.3), 66, profile.hue), darkBg, Math.max(4.5, target - 0.5), "lighter");
+  const lightBorderInk = tone(profile.sat * 0.5, 30, profile.hue);
+  const darkBorderInk = tone(Math.min(60, profile.sat * 0.5), 86, profile.hue);
+  const tokens = {
+    "--dsw-alias-bg-base": { light: hex(lightBg), dark: hex(darkBg) },
+    "--dsw-alias-bg-layer-1": { light: hex(lightLayer1), dark: hex(darkLayer1) },
+    "--dsw-alias-bg-layer-2": { light: hex(lightLayer2), dark: hex(darkLayer2) },
+    "--dsw-alias-bg-layer-3": { light: hex(lightLayer3), dark: hex(darkLayer3) },
+    "--dsw-specific-sidebar-fill": { light: hex(tone(profile.tint * 1.6, profile.lightL - 2, profile.hue)), dark: hex(tone(profile.sat * 0.4, Math.max(4, profile.darkL - 2), profile.hue)) },
+    "--dsw-specific-bubble": { light: hex(tone(profile.tint * 1.5, profile.lightL - 4, profile.hue)), dark: hex(tone(profile.sat * 0.5, profile.darkL + 6, profile.hue)) },
+    "--dsw-specific-bubble-highlight": { light: hex(tone(profile.tint * 2, profile.lightL - 9, profile.hue)), dark: hex(tone(profile.sat * 0.55, profile.darkL + 10, profile.hue)) },
+    "--dsw-specific-input-major": { light: hex(tone(profile.tint, 100, profile.hue)), dark: hex(tone(profile.sat * 0.45, profile.darkL + 3, profile.hue)) },
+    "--dsw-specific-menu": { light: hex(lightLayer2), dark: hex(darkLayer2) },
+    "--dsw-specific-tip": { light: hex(lightLayer2), dark: hex(darkLayer2) },
+    "--dsw-specific-selector": { light: hex(lightLayer3), dark: hex(darkLayer3) },
+    "--dsw-specific-sidebar-nav-item-active": { light: hex(tone(profile.tint * 2.4, profile.lightL - 6, profile.hue)), dark: hex(tone(profile.sat * 0.6, profile.darkL + 12, profile.hue)) },
+    // #107/#109 教训：徽标底色要浅到让 button-info-fill 当文字可读（两套都 ≥4.5 基本做不到，
+    // 这里取"接近白"与"接近夜底"两端，与出厂 default 同策略）
+    "--dsw-specific-sidebar-nav-item-active-accent": { light: hex(tone(profile.tint, 99, profile.hue)), dark: hex(tone(profile.sat * 0.5, Math.max(10, profile.darkL + 4), profile.hue)) },
+    "--dsw-alias-label-primary": { light: hex(lightPrimary), dark: hex(darkPrimary) },
+    "--dsw-alias-label-secondary": { light: hex(lightSecondary), dark: hex(darkSecondary) },
+    "--dsw-alias-label-tertiary": { light: hex(lightTertiary), dark: hex(darkTertiary) },
+    "--dsw-alias-label-caption": { light: hex(lightTertiary), dark: hex(darkTertiary) },
+    "--dsw-alias-brand-primary": { light: hex(brandLight), dark: hex(brandDark) },
+    "--dsw-alias-button-primary-fill": { light: hex(brandLight), dark: hex(brandDark) },
+    "--dsw-alias-button-info-fill": { light: hex(brandLight), dark: hex(brandDark) },
+    "--dsw-alias-button-primary-hover": { light: hex(tone(profile.sat, Math.max(18, brandLightL - 8), profile.hue)), dark: hex(tone(Math.min(92, profile.sat + 8), Math.min(90, brandDarkL + 8), profile.hue)) },
+    "--dsw-alias-state-business-primary": { light: hex(brandLight), dark: hex(brandDark) },
+    "--dsw-alias-label-primary-foreground": { light: foregroundOn(brandLight, 4.5), dark: foregroundOn(brandDark, 4.5) },
+    "--dsw-alias-border-l1": { light: rgba(lightBorderInk, 0.06), dark: rgba(darkBorderInk, 0.08) },
+    "--dsw-alias-border-l2": { light: rgba(lightBorderInk, 0.12), dark: rgba(darkBorderInk, 0.14) },
+    "--dsw-alias-border-l3": { light: rgba(lightBorderInk, 0.18), dark: rgba(darkBorderInk, 0.2) },
+    "--dsw-alias-border-l4": { light: rgba(lightBorderInk, 0.24), dark: rgba(darkBorderInk, 0.26) },
+    "--dsw-alias-interactive-bg-hover": { light: rgba(lightBorderInk, 0.07), dark: rgba(darkBorderInk, 0.09) },
+    "--dsw-alias-interactive-bg-active": { light: rgba(lightBorderInk, 0.12), dark: rgba(darkBorderInk, 0.14) },
+    "--dsw-alias-scrollbar-bg-l1": { light: rgba(lightBorderInk, 0.18), dark: rgba(darkBorderInk, 0.2) },
+    "--dsw-alias-scrollbar-bg-l2": { light: rgba(lightBorderInk, 0.28), dark: rgba(darkBorderInk, 0.3) },
+    "--dsw-alias-scrollbar-hover-l1": { light: rgba(lightBorderInk, 0.36), dark: rgba(darkBorderInk, 0.38) },
+    "--dsw-alias-markdown-code-block": { light: hex(lightLayer2), dark: hex(darkLayer1) },
+    "--dsw-alias-markdown-inline-code": { light: hex(lightLayer3), dark: hex(darkLayer2) },
+    "--dsw-alias-markdown-code-block-banner": { light: hex(lightLayer2), dark: hex(darkLayer3) },
+    "--dsw-alias-markdown-citation": { light: hex(lightLayer2), dark: hex(darkLayer2) },
+    "--dsw-alias-markdown-tag": { light: hex(lightLayer3), dark: hex(darkLayer3) },
+    "--dsw-alias-toast-bg": { light: hex(tone(Math.min(40, profile.sat * 0.4), 24, profile.hue)), dark: hex(tone(profile.sat * 0.5, 16, profile.hue)) },
+    "--dsw-alias-tooltip-bg": { light: hex(tone(Math.min(40, profile.sat * 0.4), 22, profile.hue)), dark: hex(tone(profile.sat * 0.5, 14, profile.hue)) },
+    "--dsw-alias-state-error-primary": { light: "#d94c4c", dark: "#f2777a" },
+    "--dsw-alias-state-warn-primary": { light: "#b7791f", dark: "#e2b04a" },
+    "--dsw-alias-state-success-primary": { light: "#2e9e5b", dark: "#5ec98d" },
+    "--dsw-alias-settings-card-fill": { light: hex(lightLayer1), dark: hex(darkLayer2) },
+    "--dsw-alias-settings-card-stroke": { light: rgba(lightBorderInk, 0.1), dark: rgba(darkBorderInk, 0.14) }
+  };
+  return tokens;
+}
+
+// src/core/css-templates.ts
+var CSS_ANCHORS = [
+  { selector: "[data-chat-flow]", label: "\u4F1A\u8BDD\u533A\u80CC\u666F", note: "\u4F1A\u8BDD\u6D88\u606F\u6D41\u6574\u4F53\u80CC\u666F\uFF08\u6700\u5E38\u7528\uFF09" },
+  { selector: "[data-composer-seat]", label: "\u8F93\u5165\u533A\u5361\u7247", note: "\u5E95\u90E8\u8F93\u5165\u6846\u533A\u57DF" },
+  { selector: "[data-ds-dark-theme]", label: "\u6DF1\u8272\u6A21\u5F0F\u5FAE\u8C03", note: "\u6DF1\u8272\u6A21\u5F0F\u4E0B\u6574\u9875\uFF08html \u7EA7\u5C5E\u6027\u9009\u62E9\u5668\uFF09" },
+  { selector: "[data-conversation-scroll]", label: "\u6D88\u606F\u6EDA\u52A8\u533A", note: "\u4F1A\u8BDD\u6EDA\u52A8\u5BB9\u5668\uFF08scrollbar \u7B49\uFF09" }
+];
 
 // src/core/precheck.ts
 var TEXT_PAIRS = [
@@ -2367,6 +2876,66 @@ var TOKEN_DESCRIPTIONS = {
 function safePresetId(id) {
   return /^[a-z0-9][a-z0-9-]{0,63}$/.test(id);
 }
+function expandKnobsInput(knobs) {
+  if (knobs === void 0 || knobs === null) return {};
+  if (typeof knobs !== "object" || Array.isArray(knobs)) throw new Error("knobs \u5FC5\u987B\u662F\u5BF9\u8C61\uFF08\u65CB\u94AE id \u2192 \u503C\uFF09");
+  const out = {};
+  for (const [id, raw] of Object.entries(knobs)) {
+    const knob = findKnob(id);
+    if (knob === void 0) throw new Error(`knobs: \u672A\u77E5\u65CB\u94AE ${id}\uFF08\u5148\u7528 preset_catalog \u67E5\u65CB\u94AE\u675F\uFF09`);
+    let value;
+    if (typeof raw === "string") value = raw;
+    else if (typeof raw === "object" && raw !== null && typeof raw.light === "string" && typeof raw.dark === "string") {
+      value = { light: raw.light, dark: raw.dark };
+    } else {
+      throw new Error(`knobs.${id}: \u503C\u5FC5\u987B\u662F\u5B57\u7B26\u4E32\u6216 { light, dark }`);
+    }
+    Object.assign(out, knobValuesForSchemes(id, value));
+  }
+  return out;
+}
+function expandPaletteInput(palette) {
+  if (palette === void 0 || palette === null) return {};
+  const p = palette;
+  if (typeof p.seed !== "string" || p.seed.trim() === "") throw new Error("palette: \u9700\u8981 seed\uFF08\u54C1\u724C\u8272\uFF0C\u5982 #8A3A70\uFF09");
+  const mood = typeof p.mood === "string" ? p.mood : "fresh";
+  if (!PALETTE_MOODS.some((m) => m.id === mood)) {
+    throw new Error(`palette.mood \u975E\u6CD5\uFF08${String(p.mood)}\uFF09\u2014\u2014\u53EF\u9009 ${PALETTE_MOODS.map((m) => m.id).join("/")}`);
+  }
+  const contrast = typeof p.contrast === "string" ? p.contrast : "AA";
+  if (contrast !== "AA" && contrast !== "AAA") throw new Error("palette.contrast \u53EA\u80FD\u662F AA \u6216 AAA");
+  return paletteTokens(p.seed, mood, contrast);
+}
+function mergeTokenSources(palette, knobs, tokens) {
+  const merged = {};
+  Object.assign(merged, expandPaletteInput(palette));
+  Object.assign(merged, expandKnobsInput(knobs));
+  if (tokens !== void 0 && tokens !== null) {
+    if (typeof tokens !== "object" || Array.isArray(tokens)) throw new Error("tokens \u5FC5\u987B\u662F\u5BF9\u8C61\uFF08\u4EE4\u724C\u540D \u2192 { light, dark }\uFF09");
+    Object.assign(merged, tokens);
+  }
+  return merged;
+}
+function applyWallpaperPresence(widgets, presence) {
+  if (presence === void 0 || presence === null) return widgets;
+  const n = Number(presence);
+  if (!Number.isFinite(n) || n < 0 || n > 1) throw new Error("wallpaper_presence \u5FC5\u987B\u662F 0~1 \u7684\u6570\u5B57");
+  if (!Array.isArray(widgets)) return widgets;
+  const text = String(Math.round(n * 100) / 100);
+  return widgets.map((widget) => {
+    if (typeof widget !== "object" || widget === null) return widget;
+    const w = widget;
+    if (typeof w.id !== "string" || !["chat-background", "settings-background", "sidebar-poster"].includes(w.id)) return widget;
+    return { ...w, params: { ...w.params ?? {}, opacity: text, opacityDark: text } };
+  });
+}
+function coverInputToPresetCover(cover) {
+  if (cover === void 0) return void 0;
+  if (cover === null) return null;
+  const c = cover;
+  if (typeof c.assetId !== "string" || c.assetId === "") throw new Error("cover: \u9700\u8981 assetId\uFF08\u7D20\u6750 id\uFF0C\u6765\u81EA asset_list\uFF09");
+  return cover;
+}
 function writeFileAtomic(file, data) {
   const tmp = `${file}.tmp`;
   writeFileSync(tmp, data, "utf8");
@@ -2538,6 +3107,8 @@ function createPresetFile(env, input) {
       tokens: theme.tokens !== void 0 ? theme.tokens : preset2.tokens
     };
   }
+  const cover = coverInputToPresetCover(input.cover);
+  if (cover !== void 0 && cover !== null) preset2.cover = cover;
   const result = validatePreset(preset2);
   if (!result.ok) throw new Error(`preset_create: ${result.errors.join("\uFF1B")}`);
   mkdirSync(join(env.presetsDir, id), { recursive: true });
@@ -2600,6 +3171,11 @@ function updatePresetFile(env, id, patch) {
   if (patch.css !== void 0) merged.css = patch.css;
   if (patch.assets !== void 0) merged.assets = patch.assets;
   if (patch.widgets !== void 0) merged.widgets = patch.widgets;
+  if (patch.cover !== void 0) {
+    const cover = coverInputToPresetCover(patch.cover);
+    if (cover === null) delete merged.cover;
+    else if (cover !== void 0) merged.cover = cover;
+  }
   if (patch.theme !== void 0) {
     if (patch.theme === null) {
       delete merged.theme;
@@ -2772,9 +3348,27 @@ ${list}` }];
         name: { type: "string", required: true, description: "\u9884\u8BBE\u540D\u79F0\uFF08\u226464 \u5B57\u7B26\uFF09" },
         tokens: {
           type: "object",
-          required: true,
           additionalProperties: true,
-          description: '\u4EE4\u724C \u2192 { light, dark } \u53CC\u503C\u6620\u5C04\uFF0C\u5982 {"--dsw-alias-bg-base": {"light": "#ffffff", "dark": "#0d121b"}}'
+          description: "\u4EE4\u724C \u2192 { light, dark } \u53CC\u503C\u6620\u5C04\uFF08\u53EF\u9009\uFF1B\u4E0E knobs/palette \u4E09\u9009\u4E00\uFF0C\u53EF\u53E0\u52A0\u2014\u2014\u663E\u5F0F tokens \u4F18\u5148\u7EA7\u6700\u9AD8\uFF09"
+        },
+        knobs: {
+          type: "object",
+          additionalProperties: true,
+          description: "\u53EF\u9009\u8BED\u4E49\u65CB\u94AE\uFF08\u63A8\u8350\uFF0C\u7701\u53BB\u624B\u7B97\u51E0\u5341\u4E2A\u4EE4\u724C\uFF09\uFF1A{ \u65CB\u94AE id: \u503C } \u6216 { \u65CB\u94AE id: { light, dark } }\u3002\u65CB\u94AE id \u89C1 preset_catalog \u7684 knobs\uFF08\u5982 spatial-bg / text-primary / radius-scale / motion-speed / mask-blur / button-family\uFF09\uFF1B\u540C\u675F\u4EE4\u724C\u4F1A\u6309\u6D3E\u751F\u89C4\u5219\u81EA\u52A8\u751F\u6210\u9636\u68AF\uFF08\u62AC\u5347\u9762/\u60AC\u6D6E\u5C42\u4E0D\u518D\u662F\u540C\u8272\uFF09\u3002"
+        },
+        palette: {
+          type: "object",
+          additionalProperties: true,
+          description: '\u53EF\u9009\u6574\u5957\u8C03\u8272\u677F\u751F\u6210\uFF1A{ seed: \u54C1\u724C\u8272\uFF08\u5982 "#8A3A70"\uFF09, mood?: "fresh"|"night"|"retro"|"mono", contrast?: "AA"|"AAA" }\u2014\u2014\u670D\u52A1\u7AEF\u6D3E\u751F\u80CC\u666F/\u5C42\u6B21/\u6587\u5B57/\u6309\u94AE/\u8FB9\u6846/\u72B6\u6001/\u4EE3\u7801\u9762\u6574\u5957\u53CC\u503C\uFF08\u6587\u5B57\u81EA\u52A8\u6EE1\u8DB3\u5BF9\u6BD4\u5EA6\u76EE\u6807\uFF09\uFF0C\u53EF\u518D\u7528 tokens/knobs \u8986\u76D6\u3002'
+        },
+        cover: {
+          type: "object",
+          additionalProperties: true,
+          description: "\u53EF\u9009\u5C01\u9762\uFF1A{ assetId, cropX?, cropY?, cropW?, cropH? }\u2014\u2014assetId \u5FC5\u987B\u540C\u65F6\u51FA\u73B0\u5728 assets \u58F0\u660E\u91CC\uFF1B\u88C1\u526A\u4E3A\u5E27\u5750\u6807\uFF083:1 \u5E27\uFF0C\u957F\u8FB9 1920\uFF09"
+        },
+        wallpaper_presence: {
+          type: "number",
+          description: "\u53EF\u9009\u58C1\u7EB8\u5B58\u5728\u611F 0~1\uFF08\u4E00\u6B21\u8BBE\u7F6E\u6240\u6709\u58C1\u7EB8\u90E8\u4EF6\u7684 opacity/opacityDark\uFF1B0=\u5173\u95ED\u58C1\u7EB8\uFF09"
         },
         css: {
           type: "array",
@@ -2805,13 +3399,20 @@ ${list}` }];
         },
         render: (args, value) => {
           const a = args;
-          const tokenNames = Object.keys(a.tokens ?? {});
+          let tokenNames = Object.keys(a.tokens ?? {});
+          try {
+            tokenNames = Object.keys(mergeTokenSources(a.palette, a.knobs, a.tokens));
+          } catch {
+          }
           const parts = [`${tokenNames.length} \u4EE4\u724C`];
           const names = tokenNames.slice(0, 8).join("\u3001") + (tokenNames.length > 8 ? "\u2026" : "");
           if (names !== "") parts.push(`\u542B ${names}`);
+          if (a.palette !== void 0) parts.push(`\u8C03\u8272\u677F seed=${a.palette.seed ?? ""}${a.palette.mood !== void 0 ? `\uFF08${a.palette.mood}\uFF09` : ""}`);
+          if (a.knobs !== void 0) parts.push(`\u65CB\u94AE ${Object.keys(a.knobs).join("\u3001")}`);
           if (Array.isArray(a.css) && a.css.length > 0) parts.push(`CSS \u8865\u4E01 ${a.css.length} \u6BB5`);
-          if (Array.isArray(a.widgets) && a.widgets.length > 0) parts.push(`\u90E8\u4EF6 ${a.widgets.map((w) => w.id).join("/")}`);
+          if (Array.isArray(a.widgets) && a.widgets.length > 0) parts.push(`\u90E8\u4EF6 ${a.widgets.map((w) => w.id).join("/")}${a.wallpaper_presence !== void 0 ? `\uFF08\u58C1\u7EB8\u5B58\u5728\u611F ${a.wallpaper_presence}\uFF09` : ""}`);
           if (Array.isArray(a.assets) && a.assets.length > 0) parts.push(`\u7D20\u6750\u5F15\u7528 ${a.assets.length} \u4E2A`);
+          if (a.cover !== void 0) parts.push(`\u5C01\u9762 ${a.cover.assetId ?? ""}`);
           if (a.theme !== void 0) parts.push(`\u4E3B\u9898 ${a.theme.id ?? ""}`);
           return [{
             type: "text",
@@ -2820,13 +3421,19 @@ ${list}` }];
         }
       },
       execute: (args) => {
+        const tokens = mergeTokenSources(args.palette, args.knobs, args.tokens);
+        if (Object.keys(tokens).length === 0) {
+          throw new Error("preset_create: \u81F3\u5C11\u63D0\u4F9B tokens / knobs / palette \u4E4B\u4E00");
+        }
+        const widgets = applyWallpaperPresence(args.widgets, args.wallpaper_presence);
         const id = createPresetFile(env, {
           name: args.name,
-          tokens: args.tokens,
+          tokens,
           css: args.css,
           assets: args.assets,
-          widgets: args.widgets,
-          theme: args.theme
+          widgets,
+          theme: args.theme,
+          cover: args.cover
         });
         return Promise.resolve({ ok: true, id });
       },
@@ -2874,7 +3481,11 @@ ${list}` }];
         render: (args, value) => {
           const RENDER_LIMIT = 40;
           const shown = value.tokens.slice(0, RENDER_LIMIT);
-          const tokenLines = shown.map((t) => `- ${t.name} [${t.group}] light=${t.light} dark=${t.dark} ${t.safety === "caution" ? "\u26A0caution" : t.safety} ${t.valueType}${t.scope === "local" ? " \u5C40\u90E8" : ""}`);
+          const tokenLines = shown.map((t) => {
+            const relation = tokenRelation(t.name);
+            const affects = relation === void 0 ? "" : `\uFF5C\u5F71\u54CD\uFF1A${relation.affects}`;
+            return `- ${t.name} [${t.group}] light=${t.light} dark=${t.dark} ${t.safety === "caution" ? "\u26A0caution" : t.safety} ${t.valueType}${t.scope === "local" ? " \u5C40\u90E8" : ""}${affects}`;
+          });
           const rest = value.matched - shown.length;
           const knobLine = value.knobs.length === 0 ? "\u65CB\u94AE\u675F\uFF1A\u65E0" : `\u65CB\u94AE\u675F ${value.knobs.length} \u4E2A\uFF08\u6BCF\u9879\u542B id/\u540D\u79F0/\u7C7B\u522B/\u63A7\u4EF6/\u8FB9\u754C/\u8986\u76D6\u4EE4\u724C\uFF09\uFF1A` + value.knobs.map((k) => `${k.id}\uFF08${k.name}\uFF1A${(k.tokens ?? []).join("+")}\uFF09`).join("\uFF1B");
           const styleLine = value.styles.length === 0 ? "\u98CE\u683C\u5B57\u5178\uFF1A\u65E0" : `\u98CE\u683C\u5B57\u5178 ${value.styles.length} \u8BCD\uFF1A${value.styles.map((s) => s.term).join("\u3001")}`;
@@ -2992,6 +3603,25 @@ ${assetLines.join("\n")}` : ""
           additionalProperties: true,
           description: "\u589E\u91CF\u5408\u5E76\u4EE4\u724C\uFF08\u53EF\u9009\uFF1B\u53EA\u66F4\u65B0\u63D0\u4F9B\u7684\u952E\uFF0C\u672A\u63D0\u4F9B\u7684\u4FDD\u6301\u539F\u503C\u2014\u2014\u5FAE\u8C03\u63A8\u8350\uFF1B\u4E0E tokens \u4E8C\u9009\u4E00\uFF09"
         },
+        knobs: {
+          type: "object",
+          additionalProperties: true,
+          description: "\u53EF\u9009\u8BED\u4E49\u65CB\u94AE\uFF08\u5E76\u5165 merge_tokens\uFF09\uFF1A{ \u65CB\u94AE id: \u503C } \u6216 { \u65CB\u94AE id: { light, dark } }\u2014\u2014\u540C\u675F\u4EE4\u724C\u81EA\u52A8\u6D3E\u751F\u9636\u68AF"
+        },
+        palette: {
+          type: "object",
+          additionalProperties: true,
+          description: "\u53EF\u9009\u6574\u5957\u8C03\u8272\u677F\uFF08\u5E76\u5165 merge_tokens\uFF09\uFF1A{ seed, mood?, contrast? }\u2014\u2014\u6309\u54C1\u724C\u8272\u91CD\u7B97\u6574\u5957\u914D\u8272"
+        },
+        cover: {
+          type: "object",
+          additionalProperties: true,
+          description: "\u53EF\u9009\u5C01\u9762\uFF08\u6574\u4F53\u66FF\u6362\uFF09\uFF1A{ assetId, cropX?, cropY?, cropW?, cropH? }\uFF1B\u4F20 null \u6E05\u7A7A\u5C01\u9762"
+        },
+        wallpaper_presence: {
+          type: "number",
+          description: "\u53EF\u9009\u58C1\u7EB8\u5B58\u5728\u611F 0~1\uFF08\u6279\u91CF\u6539\u6240\u6709\u58C1\u7EB8\u90E8\u4EF6 opacity\uFF1B\u9884\u8BBE\u6CA1\u6709\u90E8\u4EF6\u65F6\u9700\u540C\u65F6\u63D0\u4F9B widgets\uFF09"
+        },
         css: { type: "array", description: "\u53EF\u9009 CSS \u8865\u4E01\uFF08\u6574\u4F53\u66FF\u6362\uFF09" },
         assets: {
           type: "array",
@@ -3024,11 +3654,15 @@ ${assetLines.join("\n")}` : ""
           const a = args;
           const changed = [];
           if (a.name !== void 0) changed.push(`\u540D\u79F0\u2192\u300C${a.name}\u300D`);
+          if (a.palette !== void 0) changed.push(`\u8C03\u8272\u677F seed=${a.palette.seed ?? ""}${a.palette.mood !== void 0 ? `\uFF08${a.palette.mood}\uFF09` : ""}`);
+          if (a.knobs !== void 0) changed.push(`\u65CB\u94AE ${Object.keys(a.knobs).join("\u3001")}`);
           if (a.merge_tokens !== void 0) changed.push(`\u589E\u91CF\u5408\u5E76\u4EE4\u724C ${Object.keys(a.merge_tokens).length} \u4E2A\uFF08${Object.keys(a.merge_tokens).slice(0, 8).join("\u3001")}${Object.keys(a.merge_tokens).length > 8 ? "\u2026" : ""}\uFF09`);
           if (a.tokens !== void 0) changed.push(`\u6574\u4F53\u66FF\u6362\u4EE4\u724C ${Object.keys(a.tokens).length} \u4E2A`);
           if (a.css !== void 0) changed.push(`CSS \u8865\u4E01 ${(a.css ?? []).length} \u6BB5`);
           if (a.widgets !== void 0) changed.push(`\u90E8\u4EF6 ${(a.widgets ?? []).map((w) => w.id).join("/") || "\uFF08\u6E05\u7A7A\uFF09"}`);
+          if (a.wallpaper_presence !== void 0) changed.push(`\u58C1\u7EB8\u5B58\u5728\u611F\u2192${a.wallpaper_presence}`);
           if (a.assets !== void 0) changed.push(`\u7D20\u6750\u5F15\u7528 ${(a.assets ?? []).length} \u4E2A`);
+          if (a.cover !== void 0) changed.push(a.cover === null ? "\u6E05\u9664\u5C01\u9762" : `\u5C01\u9762 ${a.cover.assetId ?? ""}`);
           if (a.clear_theme === true) changed.push("\u6E05\u9664\u4E3B\u9898");
           else if (a.theme !== void 0) changed.push(`\u4E3B\u9898 ${a.theme.id ?? ""}`);
           return [{
@@ -3038,14 +3672,30 @@ ${assetLines.join("\n")}` : ""
         }
       },
       execute: (args) => {
+        const generated = mergeTokenSources(args.palette, args.knobs, void 0);
+        let tokensPatch = args.tokens;
+        let mergePatch = args.merge_tokens;
+        if (args.tokens !== void 0) {
+          tokensPatch = { ...generated, ...mergePatch ?? {}, ...args.tokens };
+          mergePatch = void 0;
+        } else if (Object.keys(generated).length > 0) {
+          mergePatch = { ...generated, ...mergePatch ?? {} };
+        }
+        let widgetsPatch = args.widgets;
+        if (args.wallpaper_presence !== void 0) {
+          const baseWidgets = args.widgets ?? readLibraryPreset(env, args.id)?.widgets;
+          if (baseWidgets === void 0) throw new Error("wallpaper_presence: \u9884\u8BBE\u6CA1\u6709\u58C1\u7EB8\u90E8\u4EF6\uFF0C\u8BF7\u540C\u65F6\u63D0\u4F9B widgets");
+          widgetsPatch = applyWallpaperPresence(baseWidgets, args.wallpaper_presence);
+        }
         const id = updatePresetFile(env, args.id, {
           name: args.name,
-          tokens: args.tokens,
+          tokens: tokensPatch,
           css: args.css,
-          mergeTokens: args.merge_tokens,
+          mergeTokens: mergePatch,
           assets: args.assets,
-          widgets: args.widgets,
-          theme: args.clear_theme === true ? null : args.theme
+          widgets: widgetsPatch,
+          theme: args.clear_theme === true ? null : args.theme,
+          cover: args.cover
         });
         if (readActiveState(env).activePresetId === id) writeActiveState(env, id);
         return Promise.resolve({ ok: true, id });
@@ -3182,14 +3832,66 @@ ${value.assets.map((a) => `- ${a.id}\uFF1A${a.name}\uFF08${a.mime}\uFF0C${format
       presentCall: (args) => ({ card: "generic", title: "\u8FD8\u539F\u9884\u8BBE\u5907\u4EFD", kind: "other", rawInput: args })
     }),
     defineTool({
+      name: "preset_palette",
+      description: "\u6309\u54C1\u724C\u8272\u751F\u6210\u6574\u5957\u534F\u8C03\u914D\u8272\uFF08#111\uFF09\uFF1A\u7ED9 seed\uFF08\u54C1\u724C\u8272\uFF09+ mood\uFF08fresh/night/retro/mono\uFF09+ contrast\uFF08AA/AAA\uFF09\uFF0C\u670D\u52A1\u7AEF\u6D3E\u751F\u80CC\u666F/\u5C42\u6B21/\u6587\u5B57/\u6309\u94AE/\u8FB9\u6846/\u72B6\u6001/\u4EE3\u7801\u9762\u7B49 40+ \u4EE4\u724C\u53CC\u503C\uFF0C\u5E76\u505A\u5BF9\u6BD4\u5EA6\u6536\u655B\uFF08label \u5BB6\u65CF\u8FBE\u5230\u76EE\u6807\u7B49\u7EA7\uFF09\u3002\u8FD4\u56DE tokens \u53EF\u76F4\u63A5\u4F20\u7ED9 preset_create/update\uFF08\u4E5F\u53EF\u518D\u7528 knobs/tokens \u8986\u76D6\uFF09\uFF1B\u9644\u5E26 preset_check \u7ED3\u679C\u4FBF\u4E8E\u5148\u770B\u95EE\u9898\u3002",
+      parameters: {
+        seed: { type: "string", required: true, description: '\u54C1\u724C\u8272\uFF08hex/rgb\uFF0C\u5982 "#8A3A70"\uFF09' },
+        mood: { type: "string", description: "\u60C5\u7EEA\u98CE\u683C\uFF1Afresh\uFF08\u9ED8\u8BA4\uFF0C\u6E05\u723D\uFF09/ night\uFF08\u6DF1\u591C\uFF09/ retro\uFF08\u590D\u53E4\uFF09/ mono\uFF08\u6781\u7B80\uFF09" },
+        contrast: { type: "string", description: "\u6587\u5B57\u5BF9\u6BD4\u5EA6\u76EE\u6807\uFF1AAA\uFF084.5\uFF0C\u9ED8\u8BA4\uFF09/ AAA\uFF087\uFF09" }
+      },
+      output: {
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            tokens: { type: "object", additionalProperties: true, required: true },
+            issues: { type: "array", required: true, items: { type: "object", additionalProperties: true } },
+            summary: { type: "object", additionalProperties: true, required: true }
+          }
+        },
+        render: (args, value) => {
+          const entries = Object.entries(value.tokens);
+          const LIMIT = 40;
+          const shown = entries.slice(0, LIMIT);
+          const lines = shown.map(([name2, v]) => `- ${name2}: light=${v.light} dark=${v.dark}`);
+          const rest = entries.length - shown.length;
+          const issues = value.issues ?? [];
+          const errorCount = issues.filter((i) => i.severity === "error").length;
+          return [{
+            type: "text",
+            text: [
+              `\u8C03\u8272\u677F\uFF1Aseed=${args.seed} mood=${args.mood ?? "fresh"} contrast=${args.contrast ?? "AA"} \u2192 ${entries.length} \u4E2A\u4EE4\u724C` + (rest > 0 ? `\uFF08\u4E0B\u5217\u524D ${LIMIT} \u6761\uFF0C\u8FD8\u6709 ${rest} \u6761\uFF1B\u5B8C\u6574\u503C\u8BF7\u4F20 tokens \u4F7F\u7528\u6216\u518D\u67E5 preset_get\uFF09` : ""),
+              lines.join("\n"),
+              `\u9884\u68C0\uFF1A${errorCount === 0 ? "\u65E0\u963B\u65AD\u95EE\u9898" : `${errorCount} \u4E2A\u963B\u65AD`}\uFF0C${issues.length} \u6761\u63D0\u793A`,
+              ...issues.map((i) => `- [${i.severity}]${i.scheme !== void 0 ? ` ${i.scheme}` : ""} ${i.token}\uFF1A${String(i.message).replace(/\n/g, " ")}`)
+            ].join("\n")
+          }];
+        }
+      },
+      execute: (args) => {
+        const tokens = expandPaletteInput({ seed: args.seed, mood: args.mood, contrast: args.contrast });
+        const result = precheckPreset(tokens);
+        return Promise.resolve({ tokens, issues: result.issues, summary: result.summary });
+      },
+      presentCall: (args) => ({ card: "generic", title: "\u751F\u6210\u8C03\u8272\u677F", kind: "other", rawInput: args })
+    }),
+    defineTool({
       name: "preset_check",
-      description: "\u8D28\u91CF\u9884\u68C0\uFF08\u521B\u5EFA/\u66F4\u65B0\u9884\u8BBE\u524D\u8C03\u7528\uFF09\uFF1A\u6821\u9A8C\u5019\u9009\u5B8C\u6574\u8F7D\u8377\uFF08tokens/css/assets/widgets/theme\uFF0C\u4E0E preset_create \u540C\u6784\u2014\u2014\u901A\u8FC7 = \u63D0\u4F9B\u7684\u5B57\u6BB5\u5FC5\u80FD\u843D\u76D8\uFF09\uFF0C\u5E76\u8BC4\u4F30\u6587\u5B57\u4E0E\u6309\u94AE\u5BF9\u6BD4\u5EA6\uFF08label \u5BB6\u65CF vs \u5404\u7EC4\u4EF6\u9762 + \u6309\u94AE\u6587\u5B57 vs \u6309\u94AE\u586B\u5145\uFF0C\u660E\u6697\u5404\u7B97\uFF1BFAIL/\u4EC5\u5927\u6587\u672C\u8FBE\u6807\u4F1A\u63D0\u793A\uFF0C\u4F4E\u5BF9\u6BD4\u53EF\u4FDD\u5B58\u4F46\u5EFA\u8BAE\u8C03\u6574\u2014\u2014\u4E0E\u754C\u9762\u5FBD\u6807\u540C\u8BED\u4E49\uFF09\u3001\u672A\u77E5\u4EE4\u724C\u3001\u660E\u6697\u53CD\u8F6C\u3002\u8F93\u51FA issues \u9010\u6761\u8BF4\u660E\uFF08error=\u963B\u65AD / warn=\u5EFA\u8BAE\uFF09\u3002",
+      description: "\u8D28\u91CF\u9884\u68C0\uFF08\u521B\u5EFA/\u66F4\u65B0\u9884\u8BBE\u524D\u8C03\u7528\uFF09\uFF1A\u6821\u9A8C\u5019\u9009\u5B8C\u6574\u8F7D\u8377\uFF08tokens/css/assets/widgets/theme\uFF0C\u4E0E preset_create \u540C\u6784\u2014\u2014\u901A\u8FC7 = \u63D0\u4F9B\u7684\u5B57\u6BB5\u5FC5\u80FD\u843D\u76D8\uFF09\uFF0C\u5E76\u8BC4\u4F30\u6587\u5B57\u4E0E\u6309\u94AE\u5BF9\u6BD4\u5EA6\uFF08label \u5BB6\u65CF vs \u5404\u7EC4\u4EF6\u9762 + \u6309\u94AE\u6587\u5B57 vs \u6309\u94AE\u586B\u5145\uFF0C\u660E\u6697\u5404\u7B97\uFF1BFAIL/\u4EC5\u5927\u6587\u672C\u8FBE\u6807\u4F1A\u63D0\u793A\uFF0C\u4F4E\u5BF9\u6BD4\u53EF\u4FDD\u5B58\u4F46\u5EFA\u8BAE\u8C03\u6574\u2014\u2014\u4E0E\u754C\u9762\u5FBD\u6807\u540C\u8BED\u4E49\uFF09\u3001\u672A\u77E5\u4EE4\u724C\u3001\u660E\u6697\u53CD\u8F6C\u3002\u8F93\u51FA issues \u9010\u6761\u8BF4\u660E\uFF08error=\u963B\u65AD / warn=\u5EFA\u8BAE\uFF09\u3002#111\uFF1A\u652F\u6301 basePresetId + merge_tokens\u2014\u2014\u5728\u73B0\u6709\u9884\u8BBE\u4E0A\u505A\u589E\u91CF\u5FAE\u8C03\u65F6\uFF0C\u4E0D\u5FC5\u628A\u5168\u91CF\u4EE4\u724C\u91CD\u53D1\u4E00\u904D\u3002",
       parameters: {
         tokens: {
           type: "object",
-          required: true,
           additionalProperties: true,
-          description: "\u5019\u9009\u4EE4\u724C \u2192 { light, dark } \u53CC\u503C\u6620\u5C04\uFF08\u4E0E preset_create \u7684 tokens \u540C\u683C\u5F0F\uFF09"
+          description: "\u5019\u9009\u4EE4\u724C \u2192 { light, dark } \u53CC\u503C\u6620\u5C04\uFF08\u53EF\u9009\uFF1B\u4E0E basePresetId \u4E8C\u9009\u4E00\uFF0C\u540C\u65F6\u63D0\u4F9B\u65F6 tokens \u8986\u76D6 base\uFF09"
+        },
+        basePresetId: {
+          type: "string",
+          description: "\u53EF\u9009\uFF1A\u4EE5\u8BE5\u9884\u8BBE\u7684\u73B0\u6709\u4EE4\u724C\u4E3A\u57FA\u5E95\uFF08id \u6765\u81EA preset_list\uFF1B\u51FA\u5382/\u5E93\u9884\u8BBE\u5747\u53EF\uFF09"
+        },
+        merge_tokens: {
+          type: "object",
+          additionalProperties: true,
+          description: "\u53EF\u9009\uFF1A\u5728\u57FA\u5E95\u4E0A\u589E\u91CF\u5408\u5E76\u7684\u4EE4\u724C\uFF08\u53EA\u8986\u76D6\u63D0\u4F9B\u7684\u952E\uFF09"
         },
         css: {
           type: "array",
@@ -3236,8 +3938,23 @@ ${value.assets.map((a) => `- ${a.id}\uFF1A${a.name}\uFF08${a.mime}\uFF0C${format
         }
       },
       execute: (args) => {
+        let baseTokens = {};
+        if (typeof args.basePresetId === "string" && args.basePresetId !== "") {
+          const fromLibrary = readLibraryPreset(env, args.basePresetId);
+          const demo = DEMO_PRESETS.find((item) => item.id === args.basePresetId);
+          const source = fromLibrary ?? demo;
+          if (source === null || source === void 0) throw new Error(`preset_check: basePresetId ${args.basePresetId} \u4E0D\u5B58\u5728`);
+          baseTokens = { ...source.tokens };
+        }
+        if (args.merge_tokens !== void 0 && (typeof args.merge_tokens !== "object" || args.merge_tokens === null || Array.isArray(args.merge_tokens))) {
+          throw new Error("preset_check: merge_tokens \u5FC5\u987B\u662F\u4EE4\u724C\u5BF9\u8C61");
+        }
+        const mergePart = args.merge_tokens ?? {};
+        const explicit = args.tokens ?? {};
+        const merged = { ...baseTokens, ...mergePart, ...explicit };
+        if (Object.keys(merged).length === 0) throw new Error("preset_check: \u81F3\u5C11\u63D0\u4F9B tokens / basePresetId \u4E4B\u4E00");
         const result = precheckPreset(
-          args.tokens ?? {},
+          merged,
           Array.isArray(args.css) ? args.css : void 0,
           { assets: args.assets, widgets: args.widgets, theme: args.theme }
         );
@@ -3256,7 +3973,7 @@ async function registerPresetTools(tools, env) {
       disposers.push(tools.register(definition));
     }
     registered = true;
-    console.log("[wallpaper-plugin] AI \u5DE5\u5177\u5DF2\u6CE8\u518C\uFF08preset_list/apply/inspect/create/catalog/get/update/delete/revert/restore_backup/check + asset_list\uFF09");
+    console.log("[wallpaper-plugin] AI \u5DE5\u5177\u5DF2\u6CE8\u518C\uFF08preset_list/apply/inspect/create/catalog/get/update/delete/revert/restore_backup/check/palette + asset_list\uFF09");
     return disposers;
   } catch (error) {
     console.warn("[wallpaper-plugin] dsh-tools \u4E0D\u53EF\u7528\uFF0CAI \u5DE5\u5177\u672A\u6CE8\u518C\uFF08\u96F6\u629B\u9519\u964D\u7EA7\uFF09\uFF1A", error instanceof Error ? error.message : String(error));

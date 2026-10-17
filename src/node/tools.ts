@@ -10,10 +10,14 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { validatePreset, normalizeDanglingCover } from '../core/schema.ts'
-import type { Preset } from '../core/schema.ts'
+import type { Preset, TokenOverride } from '../core/schema.ts'
 import { catalog } from '../core/catalog.ts'
-import { KNOBS, KNOB_CATEGORIES } from '../core/knobs.ts'
+import { KNOBS, KNOB_CATEGORIES, knobValuesForSchemes, findKnob } from '../core/knobs.ts'
 import { DEMO_PRESETS, isDemoPreset } from '../core/demo-data.ts'
+// #111：令牌 → 界面影响面（catalog render 与 check 提示）
+import { tokenRelation } from '../core/catalog-relations.ts'
+// #111：调色板生成器（preset_palette 工具 + create/update 的 palette 输入）
+import { paletteTokens, PALETTE_MOODS, type PaletteContrast, type PaletteMood } from '../core/palette.ts'
 // #67 P1：CSS 补丁锚点字典（与 UI 模板库单一事实源）
 import { CSS_ANCHORS } from '../core/css-templates.ts'
 // #72：AI 质量预检（preset_check 数据源）
@@ -35,6 +39,78 @@ export interface ToolsEnv {
 /** 预设 id 安全检查（与路由同款，杜绝路径穿越）。 */
 export function safePresetId(id: string): boolean {
   return /^[a-z0-9][a-z0-9-]{0,63}$/.test(id)
+}
+
+// ---- #111 AI 输入展开：knobs / palette → tokens，wallpaper_presence → widgets ----
+
+/** 展开 knobs 输入：{ 旋钮 id: 值 } 或 { 旋钮 id: { light, dark } } → 令牌双值。 */
+export function expandKnobsInput(knobs: unknown): Record<string, TokenOverride> {
+  if (knobs === undefined || knobs === null) return {}
+  if (typeof knobs !== 'object' || Array.isArray(knobs)) throw new Error('knobs 必须是对象（旋钮 id → 值）')
+  const out: Record<string, TokenOverride> = {}
+  for (const [id, raw] of Object.entries(knobs as Record<string, unknown>)) {
+    const knob = findKnob(id)
+    if (knob === undefined) throw new Error(`knobs: 未知旋钮 ${id}（先用 preset_catalog 查旋钮束）`)
+    let value: string | { light: string; dark: string }
+    if (typeof raw === 'string') value = raw
+    else if (typeof raw === 'object' && raw !== null && typeof (raw as { light?: unknown }).light === 'string' && typeof (raw as { dark?: unknown }).dark === 'string') {
+      value = { light: (raw as { light: string }).light, dark: (raw as { dark: string }).dark }
+    } else {
+      throw new Error(`knobs.${id}: 值必须是字符串或 { light, dark }`)
+    }
+    Object.assign(out, knobValuesForSchemes(id, value))
+  }
+  return out
+}
+
+/** 展开 palette 输入：{ seed, mood?, contrast? } → 整套令牌双值。 */
+export function expandPaletteInput(palette: unknown): Record<string, TokenOverride> {
+  if (palette === undefined || palette === null) return {}
+  const p = palette as { seed?: unknown; mood?: unknown; contrast?: unknown }
+  if (typeof p.seed !== 'string' || p.seed.trim() === '') throw new Error('palette: 需要 seed（品牌色，如 #8A3A70）')
+  const mood = (typeof p.mood === 'string' ? p.mood : 'fresh') as PaletteMood
+  if (!PALETTE_MOODS.some(m => m.id === mood)) {
+    throw new Error(`palette.mood 非法（${String(p.mood)}）——可选 ${PALETTE_MOODS.map(m => m.id).join('/')}`)
+  }
+  const contrast = (typeof p.contrast === 'string' ? p.contrast : 'AA') as PaletteContrast
+  if (contrast !== 'AA' && contrast !== 'AAA') throw new Error('palette.contrast 只能是 AA 或 AAA')
+  return paletteTokens(p.seed, mood, contrast)
+}
+
+/** 合并令牌来源（后者覆盖前者）：palette → knobs → tokens。 */
+function mergeTokenSources(palette: unknown, knobs: unknown, tokens: unknown): Record<string, TokenOverride> {
+  const merged: Record<string, TokenOverride> = {}
+  Object.assign(merged, expandPaletteInput(palette))
+  Object.assign(merged, expandKnobsInput(knobs))
+  if (tokens !== undefined && tokens !== null) {
+    if (typeof tokens !== 'object' || Array.isArray(tokens)) throw new Error('tokens 必须是对象（令牌名 → { light, dark }）')
+    Object.assign(merged, tokens as Record<string, TokenOverride>)
+  }
+  return merged
+}
+
+/** #111：壁纸存在感（0..1）→ 所有壁纸部件的 opacity/opacityDark。 */
+function applyWallpaperPresence(widgets: unknown, presence: unknown): unknown {
+  if (presence === undefined || presence === null) return widgets
+  const n = Number(presence)
+  if (!Number.isFinite(n) || n < 0 || n > 1) throw new Error('wallpaper_presence 必须是 0~1 的数字')
+  if (!Array.isArray(widgets)) return widgets
+  const text = String(Math.round(n * 100) / 100)
+  return widgets.map(widget => {
+    if (typeof widget !== 'object' || widget === null) return widget
+    const w = widget as { id?: unknown; params?: Record<string, string> }
+    if (typeof w.id !== 'string' || !['chat-background', 'settings-background', 'sidebar-poster'].includes(w.id)) return widget
+    return { ...w, params: { ...(w.params ?? {}), opacity: text, opacityDark: text } }
+  })
+}
+
+/** #111：cover 输入 → 预设 cover（原样透传，schema 负责校验 assetId 引用）。 */
+function coverInputToPresetCover(cover: unknown): { assetId: string; cropX?: string; cropY?: string; cropW?: string; cropH?: string } | null | undefined {
+  if (cover === undefined) return undefined
+  if (cover === null) return null
+  const c = cover as { assetId?: unknown }
+  if (typeof c.assetId !== 'string' || c.assetId === '') throw new Error('cover: 需要 assetId（素材 id，来自 asset_list）')
+  return cover as { assetId: string }
 }
 
 /** 原子写（tmp + rename 同卷原子替换）。 */
@@ -225,7 +301,7 @@ export function genId(prefix: string): string {
 /** 新建预设落盘（id 由 node 生成；返回 id；校验失败抛教学错误）。 */
 export function createPresetFile(
   env: ToolsEnv,
-  input: { name: string; tokens: unknown; css?: unknown; assets?: unknown; widgets?: unknown; theme?: unknown },
+  input: { name: string; tokens: unknown; css?: unknown; assets?: unknown; widgets?: unknown; theme?: unknown; cover?: unknown },
 ): string {
   const name = typeof input.name === 'string' ? input.name.trim() : ''
   if (name === '') throw new Error('preset_create: name 必填')
@@ -255,6 +331,9 @@ export function createPresetFile(
       tokens: theme.tokens !== undefined ? theme.tokens : preset.tokens,
     }
   }
+  // #111：封面（AI 此前只能手改 preset.json 才能加封面，绕过了校验）
+  const cover = coverInputToPresetCover(input.cover)
+  if (cover !== undefined && cover !== null) preset.cover = cover
   const result = validatePreset(preset)
   if (!result.ok) throw new Error(`preset_create: ${result.errors.join('；')}`)
   mkdirSync(join(env.presetsDir, id), { recursive: true })
@@ -313,7 +392,7 @@ export function inspectState(env: ToolsEnv): {
 export function updatePresetFile(
   env: ToolsEnv,
   id: string,
-  patch: { name?: unknown; tokens?: unknown; css?: unknown; mergeTokens?: unknown; assets?: unknown; widgets?: unknown; theme?: unknown },
+  patch: { name?: unknown; tokens?: unknown; css?: unknown; mergeTokens?: unknown; assets?: unknown; widgets?: unknown; theme?: unknown; cover?: unknown },
 ): string {
   if (!safePresetId(id)) throw new Error('preset_update: 非法 id')
   const existing = readLibraryPreset(env, id)
@@ -337,6 +416,12 @@ export function updatePresetFile(
   // #65 P0-3：素材引用声明 + 部件整体替换（与 css 同语义；widgets.assetId 必须引用 assets 声明）
   if (patch.assets !== undefined) merged.assets = patch.assets
   if (patch.widgets !== undefined) merged.widgets = patch.widgets
+  // #111：封面可整体替换或清除（null）
+  if (patch.cover !== undefined) {
+    const cover = coverInputToPresetCover(patch.cover)
+    if (cover === null) delete merged.cover
+    else if (cover !== undefined) merged.cover = cover
+  }
   // #70：主题写入——{ id, colorScheme, tokens? }（tokens 省略 = 取当前预设令牌）或 null（清除主题）
   if (patch.theme !== undefined) {
     if (patch.theme === null) {
@@ -536,9 +621,30 @@ export function createPresetToolDefs(
         name: { type: 'string', required: true, description: '预设名称（≤64 字符）' },
         tokens: {
           type: 'object',
-          required: true,
           additionalProperties: true,
-          description: '令牌 → { light, dark } 双值映射，如 {"--dsw-alias-bg-base": {"light": "#ffffff", "dark": "#0d121b"}}',
+          description: '令牌 → { light, dark } 双值映射（可选；与 knobs/palette 三选一，可叠加——显式 tokens 优先级最高）',
+        },
+        knobs: {
+          type: 'object',
+          additionalProperties: true,
+          description: '可选语义旋钮（推荐，省去手算几十个令牌）：{ 旋钮 id: 值 } 或 { 旋钮 id: { light, dark } }。'
+            + '旋钮 id 见 preset_catalog 的 knobs（如 spatial-bg / text-primary / radius-scale / motion-speed / mask-blur / button-family）；'
+            + '同束令牌会按派生规则自动生成阶梯（抬升面/悬浮层不再是同色）。',
+        },
+        palette: {
+          type: 'object',
+          additionalProperties: true,
+          description: '可选整套调色板生成：{ seed: 品牌色（如 "#8A3A70"）, mood?: "fresh"|"night"|"retro"|"mono", contrast?: "AA"|"AAA" }'
+            + '——服务端派生背景/层次/文字/按钮/边框/状态/代码面整套双值（文字自动满足对比度目标），可再用 tokens/knobs 覆盖。',
+        },
+        cover: {
+          type: 'object',
+          additionalProperties: true,
+          description: '可选封面：{ assetId, cropX?, cropY?, cropW?, cropH? }——assetId 必须同时出现在 assets 声明里；裁剪为帧坐标（3:1 帧，长边 1920）',
+        },
+        wallpaper_presence: {
+          type: 'number',
+          description: '可选壁纸存在感 0~1（一次设置所有壁纸部件的 opacity/opacityDark；0=关闭壁纸）',
         },
         css: {
           type: 'array',
@@ -572,14 +678,25 @@ export function createPresetToolDefs(
         },
         render: (args, value) => {
           // #110：回执要包含「写了什么」——原实现只回 id，模型无法确认令牌/部件/主题/封面是否被接受。
-          const a = args as { name?: string; tokens?: Record<string, unknown>; css?: unknown[]; assets?: unknown[]; widgets?: Array<{ id?: string }>; theme?: { id?: string } }
-          const tokenNames = Object.keys(a.tokens ?? {})
+          const a = args as {
+            name?: string; tokens?: Record<string, unknown>; knobs?: Record<string, unknown>; palette?: { seed?: string; mood?: string }
+            css?: unknown[]; assets?: unknown[]; widgets?: Array<{ id?: string }>; theme?: { id?: string }
+            cover?: { assetId?: string }; wallpaper_presence?: number
+          }
+          let tokenNames: string[] = Object.keys(a.tokens ?? {})
+          try {
+            // 与 execute 同源展开：回执要反映 palette/knobs 实际产生了多少令牌
+            tokenNames = Object.keys(mergeTokenSources(a.palette, a.knobs, a.tokens))
+          } catch { /* 校验错误由 execute 抛出，render 只做回执 */ }
           const parts: string[] = [`${tokenNames.length} 令牌`]
           const names = tokenNames.slice(0, 8).join('、') + (tokenNames.length > 8 ? '…' : '')
           if (names !== '') parts.push(`含 ${names}`)
+          if (a.palette !== undefined) parts.push(`调色板 seed=${a.palette.seed ?? ''}${a.palette.mood !== undefined ? `（${a.palette.mood}）` : ''}`)
+          if (a.knobs !== undefined) parts.push(`旋钮 ${Object.keys(a.knobs).join('、')}`)
           if (Array.isArray(a.css) && a.css.length > 0) parts.push(`CSS 补丁 ${a.css.length} 段`)
-          if (Array.isArray(a.widgets) && a.widgets.length > 0) parts.push(`部件 ${a.widgets.map(w => w.id).join('/')}`)
+          if (Array.isArray(a.widgets) && a.widgets.length > 0) parts.push(`部件 ${a.widgets.map(w => w.id).join('/')}${a.wallpaper_presence !== undefined ? `（壁纸存在感 ${a.wallpaper_presence}）` : ''}`)
           if (Array.isArray(a.assets) && a.assets.length > 0) parts.push(`素材引用 ${a.assets.length} 个`)
+          if (a.cover !== undefined) parts.push(`封面 ${a.cover.assetId ?? ''}`)
           if (a.theme !== undefined) parts.push(`主题 ${a.theme.id ?? ''}`)
           return [{
             type: 'text',
@@ -589,9 +706,17 @@ export function createPresetToolDefs(
           }]
         },
       },
-      execute: (args: { name: string; tokens: unknown; css?: unknown; assets?: unknown; widgets?: unknown; theme?: unknown }) => {
+      execute: (args: {
+        name: string; tokens?: unknown; knobs?: unknown; palette?: unknown; css?: unknown
+        assets?: unknown; widgets?: unknown; theme?: unknown; cover?: unknown; wallpaper_presence?: unknown
+      }) => {
+        const tokens = mergeTokenSources(args.palette, args.knobs, args.tokens)
+        if (Object.keys(tokens).length === 0) {
+          throw new Error('preset_create: 至少提供 tokens / knobs / palette 之一')
+        }
+        const widgets = applyWallpaperPresence(args.widgets, args.wallpaper_presence)
         const id = createPresetFile(env, {
-          name: args.name, tokens: args.tokens, css: args.css, assets: args.assets, widgets: args.widgets, theme: args.theme,
+          name: args.name, tokens, css: args.css, assets: args.assets, widgets, theme: args.theme, cover: args.cover,
         })
         return Promise.resolve({ ok: true, id })
       },
@@ -643,8 +768,12 @@ export function createPresetToolDefs(
           const shown = value.tokens.slice(0, RENDER_LIMIT) as Array<{
             name: string; group: string; light: string; dark: string; safety: string; valueType: string; scope: string
           }>
-          const tokenLines = shown.map(t =>
-            `- ${t.name} [${t.group}] light=${t.light} dark=${t.dark} ${t.safety === 'caution' ? '⚠caution' : t.safety} ${t.valueType}${t.scope === 'local' ? ' 局部' : ''}`)
+          const tokenLines = shown.map(t => {
+            // #111：附「影响面」——AI 改色前能判断会波及哪些界面区域
+            const relation = tokenRelation(t.name)
+            const affects = relation === undefined ? '' : `｜影响：${relation.affects}`
+            return `- ${t.name} [${t.group}] light=${t.light} dark=${t.dark} ${t.safety === 'caution' ? '⚠caution' : t.safety} ${t.valueType}${t.scope === 'local' ? ' 局部' : ''}${affects}`
+          })
           const rest = value.matched - shown.length
           const knobLine = value.knobs.length === 0
             ? '旋钮束：无'
@@ -803,6 +932,25 @@ export function createPresetToolDefs(
           additionalProperties: true,
           description: '增量合并令牌（可选；只更新提供的键，未提供的保持原值——微调推荐；与 tokens 二选一）',
         },
+        knobs: {
+          type: 'object',
+          additionalProperties: true,
+          description: '可选语义旋钮（并入 merge_tokens）：{ 旋钮 id: 值 } 或 { 旋钮 id: { light, dark } }——同束令牌自动派生阶梯',
+        },
+        palette: {
+          type: 'object',
+          additionalProperties: true,
+          description: '可选整套调色板（并入 merge_tokens）：{ seed, mood?, contrast? }——按品牌色重算整套配色',
+        },
+        cover: {
+          type: 'object',
+          additionalProperties: true,
+          description: '可选封面（整体替换）：{ assetId, cropX?, cropY?, cropW?, cropH? }；传 null 清空封面',
+        },
+        wallpaper_presence: {
+          type: 'number',
+          description: '可选壁纸存在感 0~1（批量改所有壁纸部件 opacity；预设没有部件时需同时提供 widgets）',
+        },
         css: { type: 'array', description: '可选 CSS 补丁（整体替换）' },
         assets: {
           type: 'array',
@@ -838,16 +986,22 @@ export function createPresetToolDefs(
           // #110：回执列出本次实际变更的字段（整体替换 vs 增量合并要能区分）。
           const a = args as {
             name?: string; tokens?: Record<string, unknown>; merge_tokens?: Record<string, unknown>
+            knobs?: Record<string, unknown>; palette?: { seed?: string; mood?: string }
             css?: unknown[]; assets?: unknown[]; widgets?: Array<{ id?: string }>
             theme?: { id?: string }; clear_theme?: boolean
+            cover?: { assetId?: string } | null; wallpaper_presence?: number
           }
           const changed: string[] = []
           if (a.name !== undefined) changed.push(`名称→「${a.name}」`)
+          if (a.palette !== undefined) changed.push(`调色板 seed=${a.palette.seed ?? ''}${a.palette.mood !== undefined ? `（${a.palette.mood}）` : ''}`)
+          if (a.knobs !== undefined) changed.push(`旋钮 ${Object.keys(a.knobs).join('、')}`)
           if (a.merge_tokens !== undefined) changed.push(`增量合并令牌 ${Object.keys(a.merge_tokens).length} 个（${Object.keys(a.merge_tokens).slice(0, 8).join('、')}${Object.keys(a.merge_tokens).length > 8 ? '…' : ''}）`)
           if (a.tokens !== undefined) changed.push(`整体替换令牌 ${Object.keys(a.tokens).length} 个`)
           if (a.css !== undefined) changed.push(`CSS 补丁 ${(a.css ?? []).length} 段`)
           if (a.widgets !== undefined) changed.push(`部件 ${(a.widgets ?? []).map(w => w.id).join('/') || '（清空）'}`)
+          if (a.wallpaper_presence !== undefined) changed.push(`壁纸存在感→${a.wallpaper_presence}`)
           if (a.assets !== undefined) changed.push(`素材引用 ${(a.assets ?? []).length} 个`)
+          if (a.cover !== undefined) changed.push(a.cover === null ? '清除封面' : `封面 ${a.cover.assetId ?? ''}`)
           if (a.clear_theme === true) changed.push('清除主题')
           else if (a.theme !== undefined) changed.push(`主题 ${a.theme.id ?? ''}`)
           return [{
@@ -858,10 +1012,32 @@ export function createPresetToolDefs(
           }]
         },
       },
-      execute: (args: { id: string; name?: string; tokens?: unknown; css?: unknown; merge_tokens?: unknown; assets?: unknown; widgets?: unknown; theme?: unknown; clear_theme?: boolean }) => {
+      execute: (args: {
+        id: string; name?: string; tokens?: unknown; css?: unknown; merge_tokens?: unknown
+        knobs?: unknown; palette?: unknown; assets?: unknown; widgets?: unknown; theme?: unknown; clear_theme?: boolean
+        cover?: unknown; wallpaper_presence?: unknown
+      }) => {
+        // #111：palette/knobs 展开后并入增量层；显式 tokens 优先级最高（整体替换）
+        const generated = mergeTokenSources(args.palette, args.knobs, undefined)
+        let tokensPatch = args.tokens
+        let mergePatch: Record<string, unknown> | undefined = args.merge_tokens as Record<string, unknown> | undefined
+        if (args.tokens !== undefined) {
+          tokensPatch = { ...generated, ...(mergePatch ?? {}), ...(args.tokens as Record<string, unknown>) }
+          mergePatch = undefined
+        } else if (Object.keys(generated).length > 0) {
+          mergePatch = { ...generated, ...(mergePatch ?? {}) }
+        }
+        // #111：壁纸存在感——没给 widgets 时对预设现有部件批量生效
+        let widgetsPatch = args.widgets
+        if (args.wallpaper_presence !== undefined) {
+          const baseWidgets = args.widgets ?? readLibraryPreset(env, args.id)?.widgets
+          if (baseWidgets === undefined) throw new Error('wallpaper_presence: 预设没有壁纸部件，请同时提供 widgets')
+          widgetsPatch = applyWallpaperPresence(baseWidgets, args.wallpaper_presence)
+        }
         const id = updatePresetFile(env, args.id, {
-          name: args.name, tokens: args.tokens, css: args.css, mergeTokens: args.merge_tokens,
-          assets: args.assets, widgets: args.widgets, theme: args.clear_theme === true ? null : args.theme,
+          name: args.name, tokens: tokensPatch, css: args.css, mergeTokens: mergePatch,
+          assets: args.assets, widgets: widgetsPatch, theme: args.clear_theme === true ? null : args.theme,
+          cover: args.cover,
         })
         // #63 P0-1：目标为当前活动预设 → 写 active.json（revision+1）驱动浏览器桥重应用——
         // 桥对"id 相同"也会重应用（applyPresetById 内部对已活动预设跳过重复持久化，防自激）。
@@ -1009,17 +1185,73 @@ export function createPresetToolDefs(
       presentCall: args => ({ card: 'generic', title: '还原预设备份', kind: 'other', rawInput: args }),
     }),
     defineTool({
+      name: 'preset_palette',
+      description: '按品牌色生成整套协调配色（#111）：给 seed（品牌色）+ mood（fresh/night/retro/mono）+ contrast（AA/AAA），'
+        + '服务端派生背景/层次/文字/按钮/边框/状态/代码面等 40+ 令牌双值，并做对比度收敛（label 家族达到目标等级）。'
+        + '返回 tokens 可直接传给 preset_create/update（也可再用 knobs/tokens 覆盖）；附带 preset_check 结果便于先看问题。',
+      parameters: {
+        seed: { type: 'string', required: true, description: '品牌色（hex/rgb，如 "#8A3A70"）' },
+        mood: { type: 'string', description: '情绪风格：fresh（默认，清爽）/ night（深夜）/ retro（复古）/ mono（极简）' },
+        contrast: { type: 'string', description: '文字对比度目标：AA（4.5，默认）/ AAA（7）' },
+      },
+      output: {
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            tokens: { type: 'object', additionalProperties: true, required: true },
+            issues: { type: 'array', required: true, items: { type: 'object', additionalProperties: true } },
+            summary: { type: 'object', additionalProperties: true, required: true },
+          },
+        },
+        render: (args, value) => {
+          const entries = Object.entries(value.tokens as Record<string, { light: string; dark: string }>)
+          const LIMIT = 40
+          const shown = entries.slice(0, LIMIT)
+          const lines = shown.map(([name, v]) => `- ${name}: light=${v.light} dark=${v.dark}`)
+          const rest = entries.length - shown.length
+          const issues = (value.issues ?? []) as Array<{ token: string; scheme?: string; severity: string; message: string }>
+          const errorCount = issues.filter(i => i.severity === 'error').length
+          return [{
+            type: 'text',
+            text: [
+              `调色板：seed=${args.seed} mood=${args.mood ?? 'fresh'} contrast=${args.contrast ?? 'AA'} → ${entries.length} 个令牌`
+                + (rest > 0 ? `（下列前 ${LIMIT} 条，还有 ${rest} 条；完整值请传 tokens 使用或再查 preset_get）` : ''),
+              lines.join('\n'),
+              `预检：${errorCount === 0 ? '无阻断问题' : `${errorCount} 个阻断`}，${issues.length} 条提示`,
+              ...issues.map(i => `- [${i.severity}]${i.scheme !== undefined ? ` ${i.scheme}` : ''} ${i.token}：${String(i.message).replace(/\n/g, ' ')}`),
+            ].join('\n'),
+          }]
+        },
+      },
+      execute: (args: { seed: string; mood?: string; contrast?: string }) => {
+        const tokens = expandPaletteInput({ seed: args.seed, mood: args.mood, contrast: args.contrast })
+        const result = precheckPreset(tokens as Record<string, unknown>)
+        return Promise.resolve({ tokens, issues: result.issues, summary: result.summary })
+      },
+      presentCall: args => ({ card: 'generic', title: '生成调色板', kind: 'other', rawInput: args }),
+    }),
+    defineTool({
       name: 'preset_check',
       description: '质量预检（创建/更新预设前调用）：校验候选完整载荷（tokens/css/assets/widgets/theme，与 preset_create 同构——'
         + '通过 = 提供的字段必能落盘），并评估文字与按钮对比度（label 家族 vs 各组件面 + 按钮文字 vs 按钮填充，明暗各算；'
         + 'FAIL/仅大文本达标会提示，低对比可保存但建议调整——与界面徽标同语义）、未知令牌、明暗反转。'
-        + '输出 issues 逐条说明（error=阻断 / warn=建议）。',
+        + '输出 issues 逐条说明（error=阻断 / warn=建议）。#111：支持 basePresetId + merge_tokens——在现有预设上做增量微调时，'
+        + '不必把全量令牌重发一遍。',
       parameters: {
         tokens: {
           type: 'object',
-          required: true,
           additionalProperties: true,
-          description: '候选令牌 → { light, dark } 双值映射（与 preset_create 的 tokens 同格式）',
+          description: '候选令牌 → { light, dark } 双值映射（可选；与 basePresetId 二选一，同时提供时 tokens 覆盖 base）',
+        },
+        basePresetId: {
+          type: 'string',
+          description: '可选：以该预设的现有令牌为基底（id 来自 preset_list；出厂/库预设均可）',
+        },
+        merge_tokens: {
+          type: 'object',
+          additionalProperties: true,
+          description: '可选：在基底上增量合并的令牌（只覆盖提供的键）',
         },
         css: {
           type: 'array',
@@ -1070,9 +1302,28 @@ export function createPresetToolDefs(
           }]
         },
       },
-      execute: (args: { tokens: unknown; css?: unknown; assets?: unknown; widgets?: unknown; theme?: unknown }) => {
+      execute: (args: {
+        tokens?: unknown; basePresetId?: unknown; merge_tokens?: unknown
+        css?: unknown; assets?: unknown; widgets?: unknown; theme?: unknown
+      }) => {
+        // #111：基底预设（库优先，其次出厂）+ 增量合并 + 显式 tokens（优先级最高）
+        let baseTokens: Record<string, unknown> = {}
+        if (typeof args.basePresetId === 'string' && args.basePresetId !== '') {
+          const fromLibrary = readLibraryPreset(env, args.basePresetId)
+          const demo = DEMO_PRESETS.find(item => item.id === args.basePresetId)
+          const source = fromLibrary ?? demo
+          if (source === null || source === undefined) throw new Error(`preset_check: basePresetId ${args.basePresetId} 不存在`)
+          baseTokens = { ...(source.tokens as unknown as Record<string, unknown>) }
+        }
+        if (args.merge_tokens !== undefined && (typeof args.merge_tokens !== 'object' || args.merge_tokens === null || Array.isArray(args.merge_tokens))) {
+          throw new Error('preset_check: merge_tokens 必须是令牌对象')
+        }
+        const mergePart = (args.merge_tokens ?? {}) as Record<string, unknown>
+        const explicit = (args.tokens ?? {}) as Record<string, unknown>
+        const merged = { ...baseTokens, ...mergePart, ...explicit }
+        if (Object.keys(merged).length === 0) throw new Error('preset_check: 至少提供 tokens / basePresetId 之一')
         const result = precheckPreset(
-          (args.tokens ?? {}) as Record<string, unknown>,
+          merged,
           Array.isArray(args.css) ? args.css as Array<{ selector: unknown; rules?: unknown }> : undefined,
           { assets: args.assets, widgets: args.widgets, theme: args.theme },
         )
@@ -1096,8 +1347,8 @@ export async function registerPresetTools(
       disposers.push(tools.register(definition))
     }
     registered = true
-    // #68/#96：注册日志补全 12 个工具清单（preset_check 曾漏列）
-    console.log('[wallpaper-plugin] AI 工具已注册（preset_list/apply/inspect/create/catalog/get/update/delete/revert/restore_backup/check + asset_list）')
+    // #111：工具清单（新增 preset_palette）
+    console.log('[wallpaper-plugin] AI 工具已注册（preset_list/apply/inspect/create/catalog/get/update/delete/revert/restore_backup/check/palette + asset_list）')
     return disposers
   } catch (error) {
     console.warn('[wallpaper-plugin] dsh-tools 不可用，AI 工具未注册（零抛错降级）：', error instanceof Error ? error.message : String(error))
