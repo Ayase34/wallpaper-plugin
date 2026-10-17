@@ -130,6 +130,73 @@ const getRender = T('preset_get').output.render({}, {
 check('preset_get render 含令牌双值与 widgets 参数',
   getRender.includes('--dsw-alias-bg-base') && getRender.includes('light=#fff') && getRender.includes('assetId=asset-render-1'))
 
+// #110：render 补全契约——模型只看得见 render 文本，四处「只报数量/只报 id」都是可见性缺陷
+const catalogRender = T('preset_catalog').output.render({ query: 'bg-base' }, {
+  matched: 45,
+  tokens: Array.from({ length: 45 }, (_, i) => ({
+    name: i === 0 ? '--dsw-alias-bg-base' : `--dsw-alias-extra-${i}`,
+    group: 'alias-bg', light: '#ffffff', dark: '#0d121b', safety: i === 0 ? 'caution' : 'safe',
+    valueType: 'color', scope: 'global',
+  })),
+  knobs: [{ id: 'background', name: '背景', tokens: ['--dsw-alias-bg-base'] }],
+  knob_categories: [], css_anchors: [{ selector: '[data-chat-flow]', label: '会话区背景', note: '' }],
+  styles: [{ term: '清爽', guidance: '', demos: ['default'] }],
+}).map(c => c.text).join('\n')
+check('preset_catalog render 列出令牌名与明暗值（不再只有数量）',
+  catalogRender.includes('--dsw-alias-bg-base') && catalogRender.includes('light=#ffffff') && catalogRender.includes('dark=#0d121b'))
+check('preset_catalog render 含截断提示（40 行上限 + 还剩 N 条）',
+  catalogRender.includes('还有 5 条') && catalogRender.includes('前 40 条'))
+check('preset_catalog render 标出 caution 令牌', catalogRender.includes('⚠caution'))
+check('preset_catalog render 含旋钮/锚点/风格词', catalogRender.includes('背景：--dsw-alias-bg-base') && catalogRender.includes('[data-chat-flow]') && catalogRender.includes('清爽'))
+
+const checkRender = T('preset_check').output.render({ tokens: {} }, {
+  ok: false,
+  issues: [
+    { token: '--dsw-alias-label-tertiary', scheme: 'light', severity: 'warn', message: '辅助文字对比度 4.3:1 仅达标大文本' },
+    { token: '--dsw-alias-nope', severity: 'warn', message: '目录外令牌' },
+    { token: '载荷', severity: 'error', message: 'widgets 引用未声明素材' },
+  ],
+  summary: { tokenCount: 2, unknownTokens: 1, contrastIssues: 1, pass: false },
+}).map(c => c.text).join('\n')
+check('preset_check render 输出 issues 全文（令牌+方案+原因）',
+  checkRender.includes('--dsw-alias-label-tertiary') && checkRender.includes('light')
+  && checkRender.includes('4.3:1') && checkRender.includes('目录外令牌') && checkRender.includes('widgets 引用未声明素材'))
+check('preset_check render 区分阻断/建议计数', checkRender.includes('1 个阻断问题') && checkRender.includes('2 条建议'))
+
+const bigTokens = Object.fromEntries(Array.from({ length: 54 }, (_, i) => [
+  `--dsw-alias-t${String(i).padStart(2, '0')}`, { light: '#111111', dark: '#222222' },
+]))
+const bigGetRender = T('preset_get').output.render({}, {
+  ok: true,
+  preset: {
+    name: '大预设', id: 'preset-big', edition: 'standard', builtin: false, hasBackup: false, tokenCount: 54,
+    tokens: bigTokens, css: [], theme: null, assets: [], widgets: [], cover: null,
+  },
+}).map(c => c.text).join('\n')
+check('preset_get render 不截断（54 个令牌全部可见）',
+  bigGetRender.includes('--dsw-alias-t00') && bigGetRender.includes('--dsw-alias-t53') && !bigGetRender.includes('还有'))
+
+const inspectRender = T('preset_inspect').output.render({}, {
+  activePresetId: 'p', activeName: '某预设', revision: 7, tier: 'standard', tokenCount: 2,
+  appliedTokenNames: ['--dsw-alias-bg-base', '--dsw-alias-label-primary'],
+}).map(c => c.text).join('\n')
+check('preset_inspect render 列出覆盖的令牌清单',
+  inspectRender.includes('--dsw-alias-bg-base') && inspectRender.includes('revision 7'))
+
+const createRender = T('preset_create').output.render(
+  { name: '回执预设', tokens: { '--dsw-alias-bg-base': { light: '#fff', dark: '#000' } }, widgets: [{ id: 'chat-background', params: {} }] },
+  { ok: true, id: 'preset-receipt' },
+).map(c => c.text).join('\n')
+check('preset_create render 回执含名称/令牌/部件',
+  createRender.includes('回执预设') && createRender.includes('1 令牌') && createRender.includes('chat-background'))
+
+const updateRender = T('preset_update').output.render(
+  { id: 'preset-receipt', merge_tokens: { '--dsw-alias-bg-base': { light: '#eee', dark: '#111' } } },
+  { ok: true, id: 'preset-receipt' },
+).map(c => c.text).join('\n')
+check('preset_update render 回执区分增量合并',
+  updateRender.includes('增量合并令牌 1 个') && updateRender.includes('--dsw-alias-bg-base'))
+
 // ============ 可靠性 ============
 
 // 4. 教学错误不崩溃（每个写工具至少一个非法参数）

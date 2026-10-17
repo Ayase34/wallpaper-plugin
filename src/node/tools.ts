@@ -508,12 +508,17 @@ export function createPresetToolDefs(
             },
           },
         },
-        render: (_args, value) => [{
-          type: 'text',
-          text: value.activeName != null
-            ? `当前外观：${value.activeName}（${value.tokenCount} 个令牌覆盖，档位 ${value.tier}）`
-            : `当前为默认外观（档位 ${value.tier}）`,
-        }],
+        render: (_args, value) => {
+          // #110：inspect 的核心信息是「到底覆盖了哪些令牌」——原 render 只报数量。
+          const names = (value.appliedTokenNames ?? []) as string[]
+          const head = value.activeName != null
+            ? `当前外观：${value.activeName}（${value.tokenCount} 个令牌覆盖，档位 ${value.tier}，revision ${value.revision}）`
+            : `当前为默认外观（档位 ${value.tier}，revision ${value.revision}）`
+          const list = names.length === 0
+            ? '令牌覆盖：无'
+            : `令牌覆盖清单（${names.length}）：${names.join('、')}`
+          return [{ type: 'text', text: `${head}\n${list}` }]
+        },
       },
       execute: () => Promise.resolve(inspectState(env)),
       presentCall: () => ({ card: 'generic', title: '查看当前外观', kind: 'other', rawInput: null }),
@@ -565,10 +570,24 @@ export function createPresetToolDefs(
             id: { type: 'string', required: true },
           },
         },
-        render: (_args, value) => [{
-          type: 'text',
-          text: value.ok ? `已创建预设 ${value.id}（未应用，用户确认后生效）` : '创建失败',
-        }],
+        render: (args, value) => {
+          // #110：回执要包含「写了什么」——原实现只回 id，模型无法确认令牌/部件/主题/封面是否被接受。
+          const a = args as { name?: string; tokens?: Record<string, unknown>; css?: unknown[]; assets?: unknown[]; widgets?: Array<{ id?: string }>; theme?: { id?: string } }
+          const tokenNames = Object.keys(a.tokens ?? {})
+          const parts: string[] = [`${tokenNames.length} 令牌`]
+          const names = tokenNames.slice(0, 8).join('、') + (tokenNames.length > 8 ? '…' : '')
+          if (names !== '') parts.push(`含 ${names}`)
+          if (Array.isArray(a.css) && a.css.length > 0) parts.push(`CSS 补丁 ${a.css.length} 段`)
+          if (Array.isArray(a.widgets) && a.widgets.length > 0) parts.push(`部件 ${a.widgets.map(w => w.id).join('/')}`)
+          if (Array.isArray(a.assets) && a.assets.length > 0) parts.push(`素材引用 ${a.assets.length} 个`)
+          if (a.theme !== undefined) parts.push(`主题 ${a.theme.id ?? ''}`)
+          return [{
+            type: 'text',
+            text: value.ok
+              ? `已创建预设 ${value.id}「${a.name ?? ''}」（${parts.join('；')}；未应用，用户确认后生效）`
+              : '创建失败',
+          }]
+        },
       },
       execute: (args: { name: string; tokens: unknown; css?: unknown; assets?: unknown; widgets?: unknown; theme?: unknown }) => {
         const id = createPresetFile(env, {
@@ -616,10 +635,40 @@ export function createPresetToolDefs(
             },
           },
         },
-        render: (_args, value) => [{
-          type: 'text',
-          text: `令牌目录命中 ${value.matched} 条；旋钮束 ${value.knobs.length} 个（如 ${value.knobs.map((k: { name: string }) => k.name).slice(0, 5).join('、')}…）；CSS 锚点 ${value.css_anchors.length} 个；风格字典 ${value.styles.length} 词`,
-        }],
+        render: (args, value) => {
+          // #110：render 是模型唯一可见的内容（宿主 createSuccessResult 只把 output.render 的
+          // 返回值放进 content，结构化 value 不直达模型）。原实现只报「命中 N 条」——模型一条
+          // 令牌都看不到，只能去翻 catalog-data.ts。这里输出紧凑表（限 40 行 + 剩余提示）。
+          const RENDER_LIMIT = 40
+          const shown = value.tokens.slice(0, RENDER_LIMIT) as Array<{
+            name: string; group: string; light: string; dark: string; safety: string; valueType: string; scope: string
+          }>
+          const tokenLines = shown.map(t =>
+            `- ${t.name} [${t.group}] light=${t.light} dark=${t.dark} ${t.safety === 'caution' ? '⚠caution' : t.safety} ${t.valueType}${t.scope === 'local' ? ' 局部' : ''}`)
+          const rest = value.matched - shown.length
+          const knobLine = value.knobs.length === 0
+            ? '旋钮束：无'
+            : `旋钮束 ${value.knobs.length} 个（每项含 id/名称/类别/控件/边界/覆盖令牌）：`
+              + value.knobs.map((k: { id: string; name: string; tokens?: string[] }) =>
+                `${k.id}（${k.name}：${(k.tokens ?? []).join('+')}）`).join('；')
+          const styleLine = value.styles.length === 0
+            ? '风格字典：无'
+            : `风格字典 ${value.styles.length} 词：${value.styles.map((s: { term: string }) => s.term).join('、')}`
+          const anchorLine = value.css_anchors.length === 0
+            ? 'CSS 锚点：无'
+            : `CSS 锚点 ${value.css_anchors.length} 个：${value.css_anchors.map((a: { selector: string }) => a.selector).join('、')}`
+          return [{
+            type: 'text',
+            text: [
+              `令牌目录：query=${args.query ?? '（无，全部）'} 命中 ${value.matched} 条`
+                + (rest > 0 ? `，下列显示前 ${shown.length} 条（还有 ${rest} 条，请用更精确的 query；分组名 alias/specific/static 可一次拿全）` : '，全部列出'),
+              tokenLines.length > 0 ? tokenLines.join('\n') : '（无匹配令牌）',
+              knobLine,
+              anchorLine,
+              styleLine,
+            ].join('\n'),
+          }]
+        },
       },
       execute: (args: { query?: string }) => {
         const query = (args.query ?? '').trim().toLowerCase()
@@ -695,11 +744,16 @@ export function createPresetToolDefs(
             cover?: { assetId: string; cropX?: string; cropY?: string; cropW?: string; cropH?: string } | null
           }
           const tokenNames = Object.keys(p.tokens ?? {})
-          const tokenLines = tokenNames.slice(0, 30).map(name => {
+          // #110：不再截断 30 条（54 个令牌的场景下模型看不到全量，微调必然漏改）。
+          // 仅设 200 条上限防病态输入，并在截断时明确提示。
+          const TOKEN_RENDER_LIMIT = 200
+          const tokenLines = tokenNames.slice(0, TOKEN_RENDER_LIMIT).map(name => {
             const v = p.tokens[name]
             return `- ${name}: light=${v?.light} dark=${v?.dark}`
           })
-          const moreTokens = tokenNames.length > 30 ? `（…共 ${tokenNames.length} 个令牌）` : ''
+          const moreTokens = tokenNames.length > TOKEN_RENDER_LIMIT
+            ? `（…还有 ${tokenNames.length - TOKEN_RENDER_LIMIT} 个未列出，共 ${tokenNames.length} 个）`
+            : ''
           const widgetLines = (p.widgets ?? []).map(w =>
             `- ${w.id}: ${Object.entries(w.params ?? {}).map(([k, v]) => `${k}=${v}`).join(' ')}`)
           const themeLine = p.theme !== null && p.theme !== undefined
@@ -780,10 +834,29 @@ export function createPresetToolDefs(
             id: { type: 'string', required: true },
           },
         },
-        render: (_args, value) => [{
-          type: 'text',
-          text: value.ok ? `已更新预设 ${value.id}（旧版已备份）` : '更新失败',
-        }],
+        render: (args, value) => {
+          // #110：回执列出本次实际变更的字段（整体替换 vs 增量合并要能区分）。
+          const a = args as {
+            name?: string; tokens?: Record<string, unknown>; merge_tokens?: Record<string, unknown>
+            css?: unknown[]; assets?: unknown[]; widgets?: Array<{ id?: string }>
+            theme?: { id?: string }; clear_theme?: boolean
+          }
+          const changed: string[] = []
+          if (a.name !== undefined) changed.push(`名称→「${a.name}」`)
+          if (a.merge_tokens !== undefined) changed.push(`增量合并令牌 ${Object.keys(a.merge_tokens).length} 个（${Object.keys(a.merge_tokens).slice(0, 8).join('、')}${Object.keys(a.merge_tokens).length > 8 ? '…' : ''}）`)
+          if (a.tokens !== undefined) changed.push(`整体替换令牌 ${Object.keys(a.tokens).length} 个`)
+          if (a.css !== undefined) changed.push(`CSS 补丁 ${(a.css ?? []).length} 段`)
+          if (a.widgets !== undefined) changed.push(`部件 ${(a.widgets ?? []).map(w => w.id).join('/') || '（清空）'}`)
+          if (a.assets !== undefined) changed.push(`素材引用 ${(a.assets ?? []).length} 个`)
+          if (a.clear_theme === true) changed.push('清除主题')
+          else if (a.theme !== undefined) changed.push(`主题 ${a.theme.id ?? ''}`)
+          return [{
+            type: 'text',
+            text: value.ok
+              ? `已更新预设 ${value.id}${changed.length > 0 ? `（${changed.join('；')}）` : '（仅落盘，未提供变更字段）'}；旧版已备份`
+              : '更新失败',
+          }]
+        },
       },
       execute: (args: { id: string; name?: string; tokens?: unknown; css?: unknown; merge_tokens?: unknown; assets?: unknown; widgets?: unknown; theme?: unknown; clear_theme?: boolean }) => {
         const id = updatePresetFile(env, args.id, {
@@ -980,12 +1053,22 @@ export function createPresetToolDefs(
             summary: { type: 'object', additionalProperties: true, required: true },
           },
         },
-        render: (_args, value) => [{
-          type: 'text',
-          text: value.ok === true
-            ? `预检通过：${value.summary.tokenCount} 令牌${value.summary.contrastIssues > 0 ? `，${value.summary.contrastIssues} 条对比度提示` : ''}`
-            : `预检未通过：${value.issues.filter((i: { severity: string }) => i.severity === 'error').length} 个阻断问题`,
-        }],
+        render: (_args, value) => {
+          // #110：issues 全文输出——原实现只报「通过/未通过 + 条数」，模型看不到是哪条对比度
+          // 不足、哪个令牌未知、哪条明暗反转，预检等于白跑。
+          const issues = (value.issues ?? []) as Array<{ token: string; scheme?: string; severity: string; message: string }>
+          const errors = issues.filter(i => i.severity === 'error')
+          const warns = issues.filter(i => i.severity !== 'error')
+          const head = value.ok === true
+            ? `预检通过（${value.summary.tokenCount} 令牌${warns.length > 0 ? `，${warns.length} 条建议` : ''}）`
+            : `预检未通过（${errors.length} 个阻断问题，${warns.length} 条建议）`
+          const lines = issues.map(i =>
+            `- [${i.severity}]${i.scheme !== undefined ? ` ${i.scheme}` : ''} ${i.token}：${String(i.message).replace(/\n/g, ' ')}`)
+          return [{
+            type: 'text',
+            text: [head, ...(lines.length > 0 ? lines : ['（无问题）'])].join('\n'),
+          }]
+        },
       },
       execute: (args: { tokens: unknown; css?: unknown; assets?: unknown; widgets?: unknown; theme?: unknown }) => {
         const result = precheckPreset(

@@ -2754,10 +2754,13 @@ function createPresetToolDefs(env, defineTool) {
             }
           }
         },
-        render: (_args, value) => [{
-          type: "text",
-          text: value.activeName != null ? `\u5F53\u524D\u5916\u89C2\uFF1A${value.activeName}\uFF08${value.tokenCount} \u4E2A\u4EE4\u724C\u8986\u76D6\uFF0C\u6863\u4F4D ${value.tier}\uFF09` : `\u5F53\u524D\u4E3A\u9ED8\u8BA4\u5916\u89C2\uFF08\u6863\u4F4D ${value.tier}\uFF09`
-        }]
+        render: (_args, value) => {
+          const names = value.appliedTokenNames ?? [];
+          const head = value.activeName != null ? `\u5F53\u524D\u5916\u89C2\uFF1A${value.activeName}\uFF08${value.tokenCount} \u4E2A\u4EE4\u724C\u8986\u76D6\uFF0C\u6863\u4F4D ${value.tier}\uFF0Crevision ${value.revision}\uFF09` : `\u5F53\u524D\u4E3A\u9ED8\u8BA4\u5916\u89C2\uFF08\u6863\u4F4D ${value.tier}\uFF0Crevision ${value.revision}\uFF09`;
+          const list = names.length === 0 ? "\u4EE4\u724C\u8986\u76D6\uFF1A\u65E0" : `\u4EE4\u724C\u8986\u76D6\u6E05\u5355\uFF08${names.length}\uFF09\uFF1A${names.join("\u3001")}`;
+          return [{ type: "text", text: `${head}
+${list}` }];
+        }
       },
       execute: () => Promise.resolve(inspectState(env)),
       presentCall: () => ({ card: "generic", title: "\u67E5\u770B\u5F53\u524D\u5916\u89C2", kind: "other", rawInput: null })
@@ -2800,10 +2803,21 @@ function createPresetToolDefs(env, defineTool) {
             id: { type: "string", required: true }
           }
         },
-        render: (_args, value) => [{
-          type: "text",
-          text: value.ok ? `\u5DF2\u521B\u5EFA\u9884\u8BBE ${value.id}\uFF08\u672A\u5E94\u7528\uFF0C\u7528\u6237\u786E\u8BA4\u540E\u751F\u6548\uFF09` : "\u521B\u5EFA\u5931\u8D25"
-        }]
+        render: (args, value) => {
+          const a = args;
+          const tokenNames = Object.keys(a.tokens ?? {});
+          const parts = [`${tokenNames.length} \u4EE4\u724C`];
+          const names = tokenNames.slice(0, 8).join("\u3001") + (tokenNames.length > 8 ? "\u2026" : "");
+          if (names !== "") parts.push(`\u542B ${names}`);
+          if (Array.isArray(a.css) && a.css.length > 0) parts.push(`CSS \u8865\u4E01 ${a.css.length} \u6BB5`);
+          if (Array.isArray(a.widgets) && a.widgets.length > 0) parts.push(`\u90E8\u4EF6 ${a.widgets.map((w) => w.id).join("/")}`);
+          if (Array.isArray(a.assets) && a.assets.length > 0) parts.push(`\u7D20\u6750\u5F15\u7528 ${a.assets.length} \u4E2A`);
+          if (a.theme !== void 0) parts.push(`\u4E3B\u9898 ${a.theme.id ?? ""}`);
+          return [{
+            type: "text",
+            text: value.ok ? `\u5DF2\u521B\u5EFA\u9884\u8BBE ${value.id}\u300C${a.name ?? ""}\u300D\uFF08${parts.join("\uFF1B")}\uFF1B\u672A\u5E94\u7528\uFF0C\u7528\u6237\u786E\u8BA4\u540E\u751F\u6548\uFF09` : "\u521B\u5EFA\u5931\u8D25"
+          }];
+        }
       },
       execute: (args) => {
         const id = createPresetFile(env, {
@@ -2857,10 +2871,25 @@ function createPresetToolDefs(env, defineTool) {
             }
           }
         },
-        render: (_args, value) => [{
-          type: "text",
-          text: `\u4EE4\u724C\u76EE\u5F55\u547D\u4E2D ${value.matched} \u6761\uFF1B\u65CB\u94AE\u675F ${value.knobs.length} \u4E2A\uFF08\u5982 ${value.knobs.map((k) => k.name).slice(0, 5).join("\u3001")}\u2026\uFF09\uFF1BCSS \u951A\u70B9 ${value.css_anchors.length} \u4E2A\uFF1B\u98CE\u683C\u5B57\u5178 ${value.styles.length} \u8BCD`
-        }]
+        render: (args, value) => {
+          const RENDER_LIMIT = 40;
+          const shown = value.tokens.slice(0, RENDER_LIMIT);
+          const tokenLines = shown.map((t) => `- ${t.name} [${t.group}] light=${t.light} dark=${t.dark} ${t.safety === "caution" ? "\u26A0caution" : t.safety} ${t.valueType}${t.scope === "local" ? " \u5C40\u90E8" : ""}`);
+          const rest = value.matched - shown.length;
+          const knobLine = value.knobs.length === 0 ? "\u65CB\u94AE\u675F\uFF1A\u65E0" : `\u65CB\u94AE\u675F ${value.knobs.length} \u4E2A\uFF08\u6BCF\u9879\u542B id/\u540D\u79F0/\u7C7B\u522B/\u63A7\u4EF6/\u8FB9\u754C/\u8986\u76D6\u4EE4\u724C\uFF09\uFF1A` + value.knobs.map((k) => `${k.id}\uFF08${k.name}\uFF1A${(k.tokens ?? []).join("+")}\uFF09`).join("\uFF1B");
+          const styleLine = value.styles.length === 0 ? "\u98CE\u683C\u5B57\u5178\uFF1A\u65E0" : `\u98CE\u683C\u5B57\u5178 ${value.styles.length} \u8BCD\uFF1A${value.styles.map((s) => s.term).join("\u3001")}`;
+          const anchorLine = value.css_anchors.length === 0 ? "CSS \u951A\u70B9\uFF1A\u65E0" : `CSS \u951A\u70B9 ${value.css_anchors.length} \u4E2A\uFF1A${value.css_anchors.map((a) => a.selector).join("\u3001")}`;
+          return [{
+            type: "text",
+            text: [
+              `\u4EE4\u724C\u76EE\u5F55\uFF1Aquery=${args.query ?? "\uFF08\u65E0\uFF0C\u5168\u90E8\uFF09"} \u547D\u4E2D ${value.matched} \u6761` + (rest > 0 ? `\uFF0C\u4E0B\u5217\u663E\u793A\u524D ${shown.length} \u6761\uFF08\u8FD8\u6709 ${rest} \u6761\uFF0C\u8BF7\u7528\u66F4\u7CBE\u786E\u7684 query\uFF1B\u5206\u7EC4\u540D alias/specific/static \u53EF\u4E00\u6B21\u62FF\u5168\uFF09` : "\uFF0C\u5168\u90E8\u5217\u51FA"),
+              tokenLines.length > 0 ? tokenLines.join("\n") : "\uFF08\u65E0\u5339\u914D\u4EE4\u724C\uFF09",
+              knobLine,
+              anchorLine,
+              styleLine
+            ].join("\n")
+          }];
+        }
       },
       execute: (args) => {
         const query = (args.query ?? "").trim().toLowerCase();
@@ -2916,11 +2945,12 @@ function createPresetToolDefs(env, defineTool) {
           if (value.ok !== true || value.preset === void 0) return [{ type: "text", text: "\u8BFB\u53D6\u5931\u8D25" }];
           const p = value.preset;
           const tokenNames = Object.keys(p.tokens ?? {});
-          const tokenLines = tokenNames.slice(0, 30).map((name2) => {
+          const TOKEN_RENDER_LIMIT = 200;
+          const tokenLines = tokenNames.slice(0, TOKEN_RENDER_LIMIT).map((name2) => {
             const v = p.tokens[name2];
             return `- ${name2}: light=${v?.light} dark=${v?.dark}`;
           });
-          const moreTokens = tokenNames.length > 30 ? `\uFF08\u2026\u5171 ${tokenNames.length} \u4E2A\u4EE4\u724C\uFF09` : "";
+          const moreTokens = tokenNames.length > TOKEN_RENDER_LIMIT ? `\uFF08\u2026\u8FD8\u6709 ${tokenNames.length - TOKEN_RENDER_LIMIT} \u4E2A\u672A\u5217\u51FA\uFF0C\u5171 ${tokenNames.length} \u4E2A\uFF09` : "";
           const widgetLines = (p.widgets ?? []).map((w) => `- ${w.id}: ${Object.entries(w.params ?? {}).map(([k, v]) => `${k}=${v}`).join(" ")}`);
           const themeLine = p.theme !== null && p.theme !== void 0 ? `\u4E3B\u9898 ${p.theme.id}\uFF08${p.theme.colorScheme}\uFF0C${Object.keys(p.theme.tokens ?? {}).length} \u4EE4\u724C\uFF09` : "\u4E3B\u9898\u65E0";
           const cover = p.cover;
@@ -2990,10 +3020,22 @@ ${assetLines.join("\n")}` : ""
             id: { type: "string", required: true }
           }
         },
-        render: (_args, value) => [{
-          type: "text",
-          text: value.ok ? `\u5DF2\u66F4\u65B0\u9884\u8BBE ${value.id}\uFF08\u65E7\u7248\u5DF2\u5907\u4EFD\uFF09` : "\u66F4\u65B0\u5931\u8D25"
-        }]
+        render: (args, value) => {
+          const a = args;
+          const changed = [];
+          if (a.name !== void 0) changed.push(`\u540D\u79F0\u2192\u300C${a.name}\u300D`);
+          if (a.merge_tokens !== void 0) changed.push(`\u589E\u91CF\u5408\u5E76\u4EE4\u724C ${Object.keys(a.merge_tokens).length} \u4E2A\uFF08${Object.keys(a.merge_tokens).slice(0, 8).join("\u3001")}${Object.keys(a.merge_tokens).length > 8 ? "\u2026" : ""}\uFF09`);
+          if (a.tokens !== void 0) changed.push(`\u6574\u4F53\u66FF\u6362\u4EE4\u724C ${Object.keys(a.tokens).length} \u4E2A`);
+          if (a.css !== void 0) changed.push(`CSS \u8865\u4E01 ${(a.css ?? []).length} \u6BB5`);
+          if (a.widgets !== void 0) changed.push(`\u90E8\u4EF6 ${(a.widgets ?? []).map((w) => w.id).join("/") || "\uFF08\u6E05\u7A7A\uFF09"}`);
+          if (a.assets !== void 0) changed.push(`\u7D20\u6750\u5F15\u7528 ${(a.assets ?? []).length} \u4E2A`);
+          if (a.clear_theme === true) changed.push("\u6E05\u9664\u4E3B\u9898");
+          else if (a.theme !== void 0) changed.push(`\u4E3B\u9898 ${a.theme.id ?? ""}`);
+          return [{
+            type: "text",
+            text: value.ok ? `\u5DF2\u66F4\u65B0\u9884\u8BBE ${value.id}${changed.length > 0 ? `\uFF08${changed.join("\uFF1B")}\uFF09` : "\uFF08\u4EC5\u843D\u76D8\uFF0C\u672A\u63D0\u4F9B\u53D8\u66F4\u5B57\u6BB5\uFF09"}\uFF1B\u65E7\u7248\u5DF2\u5907\u4EFD` : "\u66F4\u65B0\u5931\u8D25"
+          }];
+        }
       },
       execute: (args) => {
         const id = updatePresetFile(env, args.id, {
@@ -3181,10 +3223,17 @@ ${value.assets.map((a) => `- ${a.id}\uFF1A${a.name}\uFF08${a.mime}\uFF0C${format
             summary: { type: "object", additionalProperties: true, required: true }
           }
         },
-        render: (_args, value) => [{
-          type: "text",
-          text: value.ok === true ? `\u9884\u68C0\u901A\u8FC7\uFF1A${value.summary.tokenCount} \u4EE4\u724C${value.summary.contrastIssues > 0 ? `\uFF0C${value.summary.contrastIssues} \u6761\u5BF9\u6BD4\u5EA6\u63D0\u793A` : ""}` : `\u9884\u68C0\u672A\u901A\u8FC7\uFF1A${value.issues.filter((i) => i.severity === "error").length} \u4E2A\u963B\u65AD\u95EE\u9898`
-        }]
+        render: (_args, value) => {
+          const issues = value.issues ?? [];
+          const errors = issues.filter((i) => i.severity === "error");
+          const warns = issues.filter((i) => i.severity !== "error");
+          const head = value.ok === true ? `\u9884\u68C0\u901A\u8FC7\uFF08${value.summary.tokenCount} \u4EE4\u724C${warns.length > 0 ? `\uFF0C${warns.length} \u6761\u5EFA\u8BAE` : ""}\uFF09` : `\u9884\u68C0\u672A\u901A\u8FC7\uFF08${errors.length} \u4E2A\u963B\u65AD\u95EE\u9898\uFF0C${warns.length} \u6761\u5EFA\u8BAE\uFF09`;
+          const lines = issues.map((i) => `- [${i.severity}]${i.scheme !== void 0 ? ` ${i.scheme}` : ""} ${i.token}\uFF1A${String(i.message).replace(/\n/g, " ")}`);
+          return [{
+            type: "text",
+            text: [head, ...lines.length > 0 ? lines : ["\uFF08\u65E0\u95EE\u9898\uFF09"]].join("\n")
+          }];
+        }
       },
       execute: (args) => {
         const result = precheckPreset(
