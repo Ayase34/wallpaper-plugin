@@ -344,8 +344,36 @@ const checkMerged = await T('preset_check').execute({
 }, {})
 check('#111 basePresetId + merge_tokens 增量预检（应报低对比）', checkMerged.issues.length > 0)
 
+// #112：素材尺寸 + focus/zoom 语义裁剪
+const assetsWithSize = await T('asset_list').execute({}, {})
+check('#112 asset_list 输出像素尺寸（seed 素材全部可解析）',
+  assetsWithSize.assets.length > 0 && assetsWithSize.assets.every(a => typeof a.width === 'number' && typeof a.height === 'number' && a.width > 0 && a.height > 0))
+const assetRenderWithSize = T('asset_list').output.render({}, assetsWithSize).map(c => c.text).join('\n')
+check('#112 asset_list render 含尺寸', /\d+×\d+/.test(assetRenderWithSize))
+
+const focusPreset = await T('preset_create').execute({
+  name: '焦点封面测试',
+  tokens: { '--dsw-alias-bg-base': { light: '#f7f7f7', dark: '#111111' } },
+  assets: [
+    { id: 'asset-dsnm-sidebar', name: '海报.png', mime: 'image/png' },
+    { id: 'asset-dsnm-chat', name: '聊天.jpg', mime: 'image/jpeg' },
+  ],
+  cover: { assetId: 'asset-dsnm-sidebar', focus: [0.5, 0.3], zoom: 1.2 },
+  widgets: [{ id: 'chat-background', params: { assetId: 'asset-dsnm-chat', opacity: '0.5', focus: '0.5,0.3', zoom: '1.5' } }],
+}, {})
+check('#112 cover/widgets 支持 focus+zoom', focusPreset.ok === true)
+const focusDetail = await T('preset_get').execute({ id: focusPreset.id }, {})
+const coverRect = focusDetail.preset.cover
+check('#112 cover 已折算为帧坐标（数量级合理）',
+  coverRect !== null && Number(coverRect.cropW) > 0 && Number(coverRect.cropH) > 0
+  && Number(coverRect.cropW) >= 1920 - 1 && Number(coverRect.cropH) >= 640 - 1)
+const widgetParams = focusDetail.preset.widgets[0].params
+check('#112 widget focus/zoom 折算为 crop（语义键已移除）',
+  widgetParams.cropW !== undefined && widgetParams.cropH !== undefined
+  && widgetParams.focus === undefined && widgetParams.zoom === undefined)
+
 // 清理本组创建的三条测试预设
-for (const id of [knobPreset.id, palettePreset.id, withWallpaper.id]) {
+for (const id of [knobPreset.id, palettePreset.id, withWallpaper.id, focusPreset.id]) {
   await T('preset_delete').execute({ id }, {})
 }
 

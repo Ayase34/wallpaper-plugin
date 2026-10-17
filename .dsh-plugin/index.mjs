@@ -935,6 +935,36 @@ defineMethod("intersect", ["list"], ({ list }) => {
 defineMethod("transform", ["inner", "callback", "preserve"], ({ inner }, isInner) => inner.toString(isInner));
 var src_default = Schema;
 
+// src/core/crop.ts
+var WIDGET_CROP_RATIOS = {
+  "chat-background": { w: 16, h: 9 },
+  "settings-background": { w: 1, h: 1 },
+  "sidebar-poster": { w: 1, h: 5 }
+};
+function cropFrameSize(ratio, maxLong = 1920) {
+  const rw = ratio.w > 0 ? ratio.w : 1;
+  const rh = ratio.h > 0 ? ratio.h : 1;
+  const limit = maxLong > 0 ? maxLong : 1920;
+  const scale = limit / Math.max(rw, rh);
+  return { w: Math.max(1, Math.round(rw * scale)), h: Math.max(1, Math.round(rh * scale)) };
+}
+function cropFromFocus(imgW, imgH, frameW, frameH, focusX, focusY, zoom = 1, mode = "contain") {
+  if (![imgW, imgH, frameW, frameH, focusX, focusY, zoom].every(Number.isFinite)) return null;
+  if (imgW <= 0 || imgH <= 0 || frameW <= 0 || frameH <= 0 || zoom <= 0) return null;
+  const fit = mode === "cover" ? Math.max(frameW / imgW, frameH / imgH) : Math.min(frameW / imgW, frameH / imgH);
+  const scale = fit * zoom;
+  const w = imgW * scale;
+  const h = imgH * scale;
+  const fx = Math.min(1, Math.max(0, focusX));
+  const fy = Math.min(1, Math.max(0, focusY));
+  const limitX = Math.max(0, (w - frameW) / 2);
+  const limitY = Math.max(0, (h - frameH) / 2);
+  const panX = Math.min(limitX, Math.max(-limitX, w * (0.5 - fx)));
+  const panY = Math.min(limitY, Math.max(-limitY, h * (0.5 - fy)));
+  const round = (n) => Math.round(n * 10) / 10;
+  return { x: round((frameW - w) / 2 + panX), y: round((frameH - h) / 2 + panY), w: round(w), h: round(h) };
+}
+
 // src/core/widgets.ts
 var MAX_ASSETS = 100;
 var MAX_ASSET_FILE_SIZE = 20 * 1024 * 1024;
@@ -2592,6 +2622,83 @@ function paletteTokens(seed, mood = "fresh", contrast = "AA") {
   return tokens;
 }
 
+// src/core/image-size.ts
+import { openSync, readSync, closeSync } from "node:fs";
+function pngSize(buf) {
+  if (buf.length < 24) return null;
+  if (buf.readUInt32BE(0) !== 2303741511) return null;
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
+function gifSize(buf) {
+  if (buf.length < 10) return null;
+  if (buf.toString("latin1", 0, 3) !== "GIF") return null;
+  return { width: buf.readUInt16LE(6), height: buf.readUInt16LE(8) };
+}
+function webpSize(buf) {
+  if (buf.length < 30) return null;
+  if (buf.toString("latin1", 0, 4) !== "RIFF" || buf.toString("latin1", 8, 12) !== "WEBP") return null;
+  const chunk = buf.toString("latin1", 12, 16);
+  if (chunk === "VP8X") {
+    return { width: 1 + buf.readUIntLE(24, 3), height: 1 + buf.readUIntLE(27, 3) };
+  }
+  if (chunk === "VP8 ") {
+    return { width: buf.readUInt16LE(26) & 16383, height: buf.readUInt16LE(28) & 16383 };
+  }
+  if (chunk === "VP8L") {
+    const bits = buf.readUInt32LE(21);
+    return { width: (bits & 16383) + 1, height: (bits >> 14 & 16383) + 1 };
+  }
+  return null;
+}
+function jpegSize(buf) {
+  if (buf.length < 4 || buf[0] !== 255 || buf[1] !== 216) return null;
+  let offset = 2;
+  while (offset + 9 < buf.length) {
+    if (buf[offset] !== 255) {
+      offset += 1;
+      continue;
+    }
+    const marker = buf[offset + 1];
+    if (marker === 216 || marker === 1 || marker >= 208 && marker <= 215) {
+      offset += 2;
+      continue;
+    }
+    const length = buf.readUInt16BE(offset + 2);
+    if (marker >= 192 && marker <= 207 && marker !== 196 && marker !== 200 && marker !== 204) {
+      return { height: buf.readUInt16BE(offset + 5), width: buf.readUInt16BE(offset + 7) };
+    }
+    if (length < 2) return null;
+    offset += 2 + length;
+  }
+  return null;
+}
+function imageSizeFromBuffer(buf) {
+  const jpeg = jpegSize(buf);
+  if (jpeg !== null && jpeg.width > 0 && jpeg.height > 0) return jpeg;
+  for (const parse of [pngSize, gifSize, webpSize]) {
+    const size = parse(buf);
+    if (size !== null && size.width > 0 && size.height > 0) return size;
+  }
+  return null;
+}
+function imageSizeOfFile(file) {
+  let fd;
+  try {
+    fd = openSync(file, "r");
+    for (const size of [64 * 1024, 512 * 1024, 4 * 1024 * 1024]) {
+      const buf = Buffer.alloc(size);
+      const read = readSync(fd, buf, 0, size, 0);
+      const parsed = imageSizeFromBuffer(buf.subarray(0, read));
+      if (parsed !== null) return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== void 0) closeSync(fd);
+  }
+}
+
 // src/core/css-templates.ts
 var CSS_ANCHORS = [
   { selector: "[data-chat-flow]", label: "\u4F1A\u8BDD\u533A\u80CC\u666F", note: "\u4F1A\u8BDD\u6D88\u606F\u6D41\u6574\u4F53\u80CC\u666F\uFF08\u6700\u5E38\u7528\uFF09" },
@@ -2929,12 +3036,83 @@ function applyWallpaperPresence(widgets, presence) {
     return { ...w, params: { ...w.params ?? {}, opacity: text, opacityDark: text } };
   });
 }
-function coverInputToPresetCover(cover) {
+function assetFileOf(env, assetId) {
+  if (!safePresetId(assetId)) return null;
+  let files = [];
+  try {
+    files = readdirSync(env.assetsDir);
+  } catch {
+    return null;
+  }
+  const hit = files.find((file) => (file === assetId || file.startsWith(`${assetId}.`)) && !file.endsWith(".json"));
+  return hit === void 0 ? null : join(env.assetsDir, hit);
+}
+function assetSizeOf(env, assetId) {
+  const file = assetFileOf(env, assetId);
+  return file === null ? null : imageSizeOfFile(file);
+}
+var COVER_FRAME = { w: 1920, h: 640 };
+function parseFocus(raw) {
+  if (Array.isArray(raw) && raw.length === 2) {
+    const [x, y] = raw.map(Number);
+    return Number.isFinite(x) && Number.isFinite(y) ? [x, y] : null;
+  }
+  if (typeof raw === "string") {
+    const parts = raw.split(",").map(Number);
+    if (parts.length === 2 && parts.every(Number.isFinite)) return [parts[0], parts[1]];
+  }
+  return null;
+}
+function resolveCoverInput(env, cover) {
   if (cover === void 0) return void 0;
   if (cover === null) return null;
   const c = cover;
   if (typeof c.assetId !== "string" || c.assetId === "") throw new Error("cover: \u9700\u8981 assetId\uFF08\u7D20\u6750 id\uFF0C\u6765\u81EA asset_list\uFF09");
-  return cover;
+  if (c.focus === void 0 && c.zoom === void 0) return cover;
+  const size = assetSizeOf(env, c.assetId);
+  if (size === null) throw new Error(`cover: \u65E0\u6CD5\u8BFB\u53D6\u7D20\u6750 ${c.assetId} \u7684\u5C3A\u5BF8\uFF08\u6587\u4EF6\u7F3A\u5931\u6216\u683C\u5F0F\u4E0D\u652F\u6301\uFF09`);
+  const focus = parseFocus(c.focus ?? [0.5, 0.5]);
+  if (focus === null) throw new Error('cover.focus \u9700\u8981 [x, y]\uFF08\u5F52\u4E00\u5316 0~1\uFF09\u6216 "x,y" \u5B57\u7B26\u4E32');
+  const zoom = c.zoom === void 0 ? 1 : Number(c.zoom);
+  if (!Number.isFinite(zoom) || zoom <= 0 || zoom > 8) throw new Error("cover.zoom \u9700\u8981 0~8 \u7684\u6570\u5B57\uFF081=\u9002\u914D\u6846\u5185\uFF09");
+  const rect = cropFromFocus(size.width, size.height, COVER_FRAME.w, COVER_FRAME.h, focus[0], focus[1], zoom, "cover");
+  if (rect === null) throw new Error("cover: \u88C1\u526A\u6362\u7B97\u5931\u8D25\uFF08\u56FE\u7247\u5C3A\u5BF8\u5F02\u5E38\uFF09");
+  return { assetId: c.assetId, cropX: String(rect.x), cropY: String(rect.y), cropW: String(rect.w), cropH: String(rect.h) };
+}
+function normalizeWidgetsCrop(env, widgets) {
+  if (!Array.isArray(widgets)) return widgets;
+  return widgets.map((widget) => {
+    if (typeof widget !== "object" || widget === null) return widget;
+    const w = widget;
+    const ratio = typeof w.id === "string" ? WIDGET_CROP_RATIOS[w.id] : void 0;
+    if (ratio === void 0 || w.params === void 0) return widget;
+    const params = { ...w.params };
+    const apply2 = (assetKey, focusKey, zoomKey, prefix) => {
+      const assetId = params[assetKey];
+      if (typeof assetId !== "string") return;
+      const hasFocus = params[focusKey] !== void 0;
+      const hasZoom = params[zoomKey] !== void 0;
+      if (!hasFocus && !hasZoom) return;
+      const size = assetSizeOf(env, assetId);
+      if (size === null) throw new Error(`widgets: \u65E0\u6CD5\u8BFB\u53D6\u7D20\u6750 ${assetId} \u7684\u5C3A\u5BF8\uFF08focus/zoom \u6362\u7B97\u9700\u8981\uFF09`);
+      const frame = cropFrameSize(ratio);
+      const focus = parseFocus(params[focusKey] ?? [0.5, 0.5]);
+      if (focus === null) throw new Error(`widgets.${focusKey} \u9700\u8981 [x, y]\uFF08\u5F52\u4E00\u5316 0~1\uFF09\u6216 "x,y" \u5B57\u7B26\u4E32`);
+      const zoom = params[zoomKey] === void 0 ? 1 : Number(params[zoomKey]);
+      if (!Number.isFinite(zoom) || zoom <= 0 || zoom > 8) throw new Error(`widgets.${zoomKey} \u9700\u8981 0~8 \u7684\u6570\u5B57`);
+      const rect = cropFromFocus(size.width, size.height, frame.w, frame.h, focus[0], focus[1], zoom);
+      if (rect === null) throw new Error("widgets: \u88C1\u526A\u6362\u7B97\u5931\u8D25\uFF08\u56FE\u7247\u5C3A\u5BF8\u5F02\u5E38\uFF09");
+      params[`${prefix}cropX`] = String(rect.x);
+      params[`${prefix}cropY`] = String(rect.y);
+      params[`${prefix}cropW`] = String(rect.w);
+      params[`${prefix}cropH`] = String(rect.h);
+      delete params[focusKey];
+      delete params[zoomKey];
+    };
+    apply2("assetId", "focus", "zoom", "");
+    apply2("assetIdDark", "focusDark", "zoomDark", "Dark");
+    return { ...w, params };
+  });
 }
 function writeFileAtomic(file, data) {
   const tmp = `${file}.tmp`;
@@ -3044,6 +3222,11 @@ function listWallpaperAssets(env) {
           mime: meta.mime,
           size: typeof meta.size === "number" ? meta.size : 0
         };
+        const dims = assetSizeOf(env, meta.id);
+        if (dims !== null) {
+          entry.width = dims.width;
+          entry.height = dims.height;
+        }
         if (meta.layers !== void 0) entry.layers = meta.layers;
         out.push(entry);
       }
@@ -3107,7 +3290,7 @@ function createPresetFile(env, input) {
       tokens: theme.tokens !== void 0 ? theme.tokens : preset2.tokens
     };
   }
-  const cover = coverInputToPresetCover(input.cover);
+  const cover = resolveCoverInput(env, input.cover);
   if (cover !== void 0 && cover !== null) preset2.cover = cover;
   const result = validatePreset(preset2);
   if (!result.ok) throw new Error(`preset_create: ${result.errors.join("\uFF1B")}`);
@@ -3172,7 +3355,7 @@ function updatePresetFile(env, id, patch) {
   if (patch.assets !== void 0) merged.assets = patch.assets;
   if (patch.widgets !== void 0) merged.widgets = patch.widgets;
   if (patch.cover !== void 0) {
-    const cover = coverInputToPresetCover(patch.cover);
+    const cover = resolveCoverInput(env, patch.cover);
     if (cover === null) delete merged.cover;
     else if (cover !== void 0) merged.cover = cover;
   }
@@ -3364,7 +3547,7 @@ ${list}` }];
         cover: {
           type: "object",
           additionalProperties: true,
-          description: "\u53EF\u9009\u5C01\u9762\uFF1A{ assetId, cropX?, cropY?, cropW?, cropH? }\u2014\u2014assetId \u5FC5\u987B\u540C\u65F6\u51FA\u73B0\u5728 assets \u58F0\u660E\u91CC\uFF1B\u88C1\u526A\u4E3A\u5E27\u5750\u6807\uFF083:1 \u5E27\uFF0C\u957F\u8FB9 1920\uFF09"
+          description: "\u53EF\u9009\u5C01\u9762\uFF1A{ assetId, cropX?, cropY?, cropW?, cropH? }\u2014\u2014assetId \u5FC5\u987B\u540C\u65F6\u51FA\u73B0\u5728 assets \u58F0\u660E\u91CC\uFF1B\u88C1\u526A\u4E3A\u5E27\u5750\u6807\uFF083:1 \u5E27\uFF0C\u957F\u8FB9 1920\uFF09\u3002\u63A8\u8350\u7528\u8BED\u4E49\u88C1\u526A\uFF1A{ assetId, focus: [x, y]\uFF08\u56FE\u7247\u5185\u5F52\u4E00\u5316 0~1\uFF0C\u5982 [0.5, 0.35]\uFF09, zoom?: 1 }\u2014\u2014\u670D\u52A1\u7AEF\u6309\u7D20\u6750\u50CF\u7D20\u5C3A\u5BF8\u6298\u7B97\u5E27\u5750\u6807\uFF0Ccover \u6A21\u5F0F\u4FDD\u8BC1\u94FA\u6EE1\u5361\u7247"
         },
         wallpaper_presence: {
           type: "number",
@@ -3425,7 +3608,7 @@ ${list}` }];
         if (Object.keys(tokens).length === 0) {
           throw new Error("preset_create: \u81F3\u5C11\u63D0\u4F9B tokens / knobs / palette \u4E4B\u4E00");
         }
-        const widgets = applyWallpaperPresence(args.widgets, args.wallpaper_presence);
+        const widgets = normalizeWidgetsCrop(env, applyWallpaperPresence(args.widgets, args.wallpaper_presence));
         const id = createPresetFile(env, {
           name: args.name,
           tokens,
@@ -3693,7 +3876,7 @@ ${assetLines.join("\n")}` : ""
           css: args.css,
           mergeTokens: mergePatch,
           assets: args.assets,
-          widgets: widgetsPatch,
+          widgets: normalizeWidgetsCrop(env, widgetsPatch),
           theme: args.clear_theme === true ? null : args.theme,
           cover: args.cover
         });
@@ -3756,7 +3939,7 @@ ${assetLines.join("\n")}` : ""
     }),
     defineTool({
       name: "asset_list",
-      description: "\u5217\u51FA\u58C1\u7EB8\u5E93\u5DF2\u6709\u7D20\u6750\uFF08\u804A\u5929\u80CC\u666F/\u8BBE\u7F6E\u5361\u80CC\u666F/\u4FA7\u680F\u6D77\u62A5\u53EF\u7528\u7684\u56FE\u7247\uFF09\uFF1Aid/\u540D\u79F0/mime/\u4F53\u79EF\u2014\u2014\u8BBE\u7F6E\u90E8\u4EF6\uFF08widgets\uFF09\u524D\u5148\u67E5\u8FD9\u91CC\uFF0C\u7528\u8FD4\u56DE\u7684 id \u5F15\u7528\u7D20\u6750\uFF08id \u4E0D\u80FD\u51ED\u7A7A\u7F16\u9020\uFF09\uFF1B\u7D20\u6750\u4E0A\u4F20\u4ECD\u7531\u7528\u6237\u5728\u754C\u9762\u5B8C\u6210\u3002",
+      description: "\u5217\u51FA\u58C1\u7EB8\u5E93\u5DF2\u6709\u7D20\u6750\uFF08\u804A\u5929\u80CC\u666F/\u8BBE\u7F6E\u5361\u80CC\u666F/\u4FA7\u680F\u6D77\u62A5\u53EF\u7528\u7684\u56FE\u7247\uFF09\uFF1Aid/\u540D\u79F0/mime/\u4F53\u79EF/\u50CF\u7D20\u5C3A\u5BF8\u2014\u2014\u8BBE\u7F6E\u90E8\u4EF6\uFF08widgets\uFF09\u524D\u5148\u67E5\u8FD9\u91CC\uFF0C\u7528\u8FD4\u56DE\u7684 id \u5F15\u7528\u7D20\u6750\uFF08id \u4E0D\u80FD\u51ED\u7A7A\u7F16\u9020\uFF09\uFF1Bcover/widgets \u652F\u6301 focus/zoom\uFF08\u5982 focus:[0.5,0.35]\u3001zoom:1.2\uFF09\uFF0C\u670D\u52A1\u7AEF\u6309 width/height \u6298\u7B97\u88C1\u526A\u5750\u6807\uFF1B\u7D20\u6750\u4E0A\u4F20\u4ECD\u7531\u7528\u6237\u5728\u754C\u9762\u5B8C\u6210\u3002",
       parameters: {},
       output: {
         schema: {
@@ -3774,6 +3957,9 @@ ${assetLines.join("\n")}` : ""
                   name: { type: "string", required: true },
                   mime: { type: "string", required: true },
                   size: { type: "integer", required: true },
+                  // #112：像素尺寸（读文件头；未知格式缺省）
+                  width: { type: "integer" },
+                  height: { type: "integer" },
                   // #96（审计）：分层合成壁纸（#90）的 layers 元数据随 listWallpaperAssets 输出——
                   // additionalProperties:false 下未声明键会让宿主输出校验抛错（测试 stub 掩盖）
                   layers: {
@@ -3797,7 +3983,7 @@ ${assetLines.join("\n")}` : ""
           // #102：render 必须携带素材 id——LLM 看到的是 render 文本，原实现只拼中文文件名，
           // AI 拿不到合法标识符（实测只能翻磁盘目录找 id）
           text: value.assets.length === 0 ? "\u58C1\u7EB8\u5E93\u4E3A\u7A7A\uFF08\u7D20\u6750\u4E0A\u4F20\u7531\u7528\u6237\u5728\u754C\u9762\u5B8C\u6210\uFF09" : `\u58C1\u7EB8\u5E93\u5171 ${value.assets.length} \u4E2A\u7D20\u6750\uFF08widgets \u5F15\u7528\u8BF7\u7528 id\uFF09\uFF1A
-${value.assets.map((a) => `- ${a.id}\uFF1A${a.name}\uFF08${a.mime}\uFF0C${formatBytes(a.size)}\uFF09`).join("\n")}`
+${value.assets.map((a) => `- ${a.id}\uFF1A${a.name}\uFF08${a.mime}\uFF0C${formatBytes(a.size)}${a.width !== void 0 && a.height !== void 0 ? `\uFF0C${a.width}\xD7${a.height}` : ""}\uFF09`).join("\n")}`
         }]
       },
       execute: () => Promise.resolve({ assets: listWallpaperAssets(env) }),

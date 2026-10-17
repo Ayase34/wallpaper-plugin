@@ -18,6 +18,9 @@ import { DEMO_PRESETS, isDemoPreset } from '../core/demo-data.ts'
 import { tokenRelation } from '../core/catalog-relations.ts'
 // #111：调色板生成器（preset_palette 工具 + create/update 的 palette 输入）
 import { paletteTokens, PALETTE_MOODS, type PaletteContrast, type PaletteMood } from '../core/palette.ts'
+// #112：图片尺寸（只读文件头）+ 焦点/缩放 → 帧坐标裁剪
+import { imageSizeOfFile } from '../core/image-size.ts'
+import { cropFromFocus, cropFrameSize, WIDGET_CROP_RATIOS } from '../core/crop.ts'
 // #67 P1：CSS 补丁锚点字典（与 UI 模板库单一事实源）
 import { CSS_ANCHORS } from '../core/css-templates.ts'
 // #72：AI 质量预检（preset_check 数据源）
@@ -104,13 +107,92 @@ function applyWallpaperPresence(widgets: unknown, presence: unknown): unknown {
   })
 }
 
-/** #111：cover 输入 → 预设 cover（原样透传，schema 负责校验 assetId 引用）。 */
-function coverInputToPresetCover(cover: unknown): { assetId: string; cropX?: string; cropY?: string; cropW?: string; cropH?: string } | null | undefined {
+/** #112：定位素材数据文件（<id>.<ext>，排除 <id>.json sidecar）。 */
+function assetFileOf(env: ToolsEnv, assetId: string): string | null {
+  if (!safePresetId(assetId)) return null
+  let files: string[] = []
+  try { files = readdirSync(env.assetsDir) } catch { return null }
+  const hit = files.find(file => (file === assetId || file.startsWith(`${assetId}.`)) && !file.endsWith('.json'))
+  return hit === undefined ? null : join(env.assetsDir, hit)
+}
+
+/** #112：素材像素尺寸（读文件头；未知返回 null）。 */
+function assetSizeOf(env: ToolsEnv, assetId: string): { width: number; height: number } | null {
+  const file = assetFileOf(env, assetId)
+  return file === null ? null : imageSizeOfFile(file)
+}
+
+const COVER_FRAME = { w: 1920, h: 640 } // 封面 3:1 帧（与预设 cover 坐标一致）
+
+/** #112：解析焦点/缩放参数（数组或 "x,y" 字符串）。 */
+function parseFocus(raw: unknown): [number, number] | null {
+  if (Array.isArray(raw) && raw.length === 2) {
+    const [x, y] = raw.map(Number)
+    return Number.isFinite(x) && Number.isFinite(y) ? [x, y] : null
+  }
+  if (typeof raw === 'string') {
+    const parts = raw.split(',').map(Number)
+    if (parts.length === 2 && parts.every(Number.isFinite)) return [parts[0], parts[1]]
+  }
+  return null
+}
+
+/** #112：cover 支持 { focus: [x,y], zoom } → 帧坐标裁剪；裸 cropX/Y/W/H 仍原样透传。 */
+function resolveCoverInput(env: ToolsEnv, cover: unknown): { assetId: string; cropX?: string; cropY?: string; cropW?: string; cropH?: string } | null | undefined {
   if (cover === undefined) return undefined
   if (cover === null) return null
-  const c = cover as { assetId?: unknown }
+  const c = cover as { assetId?: unknown; focus?: unknown; zoom?: unknown }
   if (typeof c.assetId !== 'string' || c.assetId === '') throw new Error('cover: 需要 assetId（素材 id，来自 asset_list）')
-  return cover as { assetId: string }
+  if (c.focus === undefined && c.zoom === undefined) return cover as { assetId: string }
+  const size = assetSizeOf(env, c.assetId)
+  if (size === null) throw new Error(`cover: 无法读取素材 ${c.assetId} 的尺寸（文件缺失或格式不支持）`)
+  const focus = parseFocus(c.focus ?? [0.5, 0.5])
+  if (focus === null) throw new Error('cover.focus 需要 [x, y]（归一化 0~1）或 "x,y" 字符串')
+  const zoom = c.zoom === undefined ? 1 : Number(c.zoom)
+  if (!Number.isFinite(zoom) || zoom <= 0 || zoom > 8) throw new Error('cover.zoom 需要 0~8 的数字（1=适配框内）')
+  const rect = cropFromFocus(size.width, size.height, COVER_FRAME.w, COVER_FRAME.h, focus[0], focus[1], zoom, 'cover')
+  if (rect === null) throw new Error('cover: 裁剪换算失败（图片尺寸异常）')
+  return { assetId: c.assetId, cropX: String(rect.x), cropY: String(rect.y), cropW: String(rect.w), cropH: String(rect.h) }
+}
+
+/**
+ * #112：部件参数支持 focus/zoom（浅色 `focus`/`zoom`，深色 `focusDark`/`zoomDark`），
+ * 在写入前折算为 cropX… 并移除语义键。未使用语义键的部件原样返回。
+ */
+function normalizeWidgetsCrop(env: ToolsEnv, widgets: unknown): unknown {
+  if (!Array.isArray(widgets)) return widgets
+  return widgets.map(widget => {
+    if (typeof widget !== 'object' || widget === null) return widget
+    const w = widget as { id?: unknown; params?: Record<string, unknown> }
+    const ratio = typeof w.id === 'string' ? WIDGET_CROP_RATIOS[w.id] : undefined
+    if (ratio === undefined || w.params === undefined) return widget
+    const params: Record<string, unknown> = { ...w.params }
+    const apply = (assetKey: string, focusKey: string, zoomKey: string, prefix: string): void => {
+      const assetId = params[assetKey]
+      if (typeof assetId !== 'string') return
+      const hasFocus = params[focusKey] !== undefined
+      const hasZoom = params[zoomKey] !== undefined
+      if (!hasFocus && !hasZoom) return
+      const size = assetSizeOf(env, assetId)
+      if (size === null) throw new Error(`widgets: 无法读取素材 ${assetId} 的尺寸（focus/zoom 换算需要）`)
+      const frame = cropFrameSize(ratio)
+      const focus = parseFocus(params[focusKey] ?? [0.5, 0.5])
+      if (focus === null) throw new Error(`widgets.${focusKey} 需要 [x, y]（归一化 0~1）或 "x,y" 字符串`)
+      const zoom = params[zoomKey] === undefined ? 1 : Number(params[zoomKey])
+      if (!Number.isFinite(zoom) || zoom <= 0 || zoom > 8) throw new Error(`widgets.${zoomKey} 需要 0~8 的数字`)
+      const rect = cropFromFocus(size.width, size.height, frame.w, frame.h, focus[0], focus[1], zoom)
+      if (rect === null) throw new Error('widgets: 裁剪换算失败（图片尺寸异常）')
+      params[`${prefix}cropX`] = String(rect.x)
+      params[`${prefix}cropY`] = String(rect.y)
+      params[`${prefix}cropW`] = String(rect.w)
+      params[`${prefix}cropH`] = String(rect.h)
+      delete params[focusKey]
+      delete params[zoomKey]
+    }
+    apply('assetId', 'focus', 'zoom', '')
+    apply('assetIdDark', 'focusDark', 'zoomDark', 'Dark')
+    return { ...w, params }
+  })
 }
 
 /** 原子写（tmp + rename 同卷原子替换）。 */
@@ -235,8 +317,8 @@ export function getPresetDetail(env: ToolsEnv, id: string): {
 /** #65 P0-3：壁纸库素材清单（asset_list 数据源）——读 <assetsDir>/<id>.json meta sidecar；
  * 损坏 meta 跳过；缺文件条目保留（悬空引用无害——编译跳过缺素材）。
  * #90：分层合成壁纸（layers 字段：动图引用 + 帧坐标矩形）作为元数据输出（无 dataUrl 泄漏）。 */
-export function listWallpaperAssets(env: ToolsEnv): Array<{ id: string; name: string; mime: string; size: number; layers?: unknown }> {
-  const out: Array<{ id: string; name: string; mime: string; size: number; layers?: unknown }> = []
+export function listWallpaperAssets(env: ToolsEnv): Array<{ id: string; name: string; mime: string; size: number; width?: number; height?: number; layers?: unknown }> {
+  const out: Array<{ id: string; name: string; mime: string; size: number; width?: number; height?: number; layers?: unknown }> = []
   let files: string[] = []
   try { files = readdirSync(env.assetsDir) } catch { return out }
   for (const file of files) {
@@ -246,9 +328,12 @@ export function listWallpaperAssets(env: ToolsEnv): Array<{ id: string; name: st
     try {
       const meta = JSON.parse(readFileSync(join(env.assetsDir, file), 'utf8')) as { id?: unknown; name?: unknown; mime?: unknown; size?: unknown; layers?: unknown }
       if (typeof meta.id === 'string' && typeof meta.name === 'string' && typeof meta.mime === 'string') {
-        const entry: { id: string; name: string; mime: string; size: number; layers?: unknown } = {
+        const entry: { id: string; name: string; mime: string; size: number; width?: number; height?: number; layers?: unknown } = {
           id: meta.id, name: meta.name, mime: meta.mime, size: typeof meta.size === 'number' ? meta.size : 0,
         }
+        // #112：像素尺寸（只读文件头）——AI 需要它把 focus/zoom 换算成帧坐标裁剪
+        const dims = assetSizeOf(env, meta.id)
+        if (dims !== null) { entry.width = dims.width; entry.height = dims.height }
         if (meta.layers !== undefined) entry.layers = meta.layers
         out.push(entry)
       }
@@ -332,7 +417,7 @@ export function createPresetFile(
     }
   }
   // #111：封面（AI 此前只能手改 preset.json 才能加封面，绕过了校验）
-  const cover = coverInputToPresetCover(input.cover)
+  const cover = resolveCoverInput(env, input.cover)
   if (cover !== undefined && cover !== null) preset.cover = cover
   const result = validatePreset(preset)
   if (!result.ok) throw new Error(`preset_create: ${result.errors.join('；')}`)
@@ -418,7 +503,7 @@ export function updatePresetFile(
   if (patch.widgets !== undefined) merged.widgets = patch.widgets
   // #111：封面可整体替换或清除（null）
   if (patch.cover !== undefined) {
-    const cover = coverInputToPresetCover(patch.cover)
+    const cover = resolveCoverInput(env, patch.cover)
     if (cover === null) delete merged.cover
     else if (cover !== undefined) merged.cover = cover
   }
@@ -640,7 +725,8 @@ export function createPresetToolDefs(
         cover: {
           type: 'object',
           additionalProperties: true,
-          description: '可选封面：{ assetId, cropX?, cropY?, cropW?, cropH? }——assetId 必须同时出现在 assets 声明里；裁剪为帧坐标（3:1 帧，长边 1920）',
+          description: '可选封面：{ assetId, cropX?, cropY?, cropW?, cropH? }——assetId 必须同时出现在 assets 声明里；裁剪为帧坐标（3:1 帧，长边 1920）。'
+            + '推荐用语义裁剪：{ assetId, focus: [x, y]（图片内归一化 0~1，如 [0.5, 0.35]）, zoom?: 1 }——服务端按素材像素尺寸折算帧坐标，cover 模式保证铺满卡片',
         },
         wallpaper_presence: {
           type: 'number',
@@ -714,7 +800,7 @@ export function createPresetToolDefs(
         if (Object.keys(tokens).length === 0) {
           throw new Error('preset_create: 至少提供 tokens / knobs / palette 之一')
         }
-        const widgets = applyWallpaperPresence(args.widgets, args.wallpaper_presence)
+        const widgets = normalizeWidgetsCrop(env, applyWallpaperPresence(args.widgets, args.wallpaper_presence))
         const id = createPresetFile(env, {
           name: args.name, tokens, css: args.css, assets: args.assets, widgets, theme: args.theme, cover: args.cover,
         })
@@ -1036,7 +1122,7 @@ export function createPresetToolDefs(
         }
         const id = updatePresetFile(env, args.id, {
           name: args.name, tokens: tokensPatch, css: args.css, mergeTokens: mergePatch,
-          assets: args.assets, widgets: widgetsPatch, theme: args.clear_theme === true ? null : args.theme,
+          assets: args.assets, widgets: normalizeWidgetsCrop(env, widgetsPatch), theme: args.clear_theme === true ? null : args.theme,
           cover: args.cover,
         })
         // #63 P0-1：目标为当前活动预设 → 写 active.json（revision+1）驱动浏览器桥重应用——
@@ -1101,8 +1187,9 @@ export function createPresetToolDefs(
     }),
     defineTool({
       name: 'asset_list',
-      description: '列出壁纸库已有素材（聊天背景/设置卡背景/侧栏海报可用的图片）：id/名称/mime/体积——'
-        + '设置部件（widgets）前先查这里，用返回的 id 引用素材（id 不能凭空编造）；素材上传仍由用户在界面完成。',
+      description: '列出壁纸库已有素材（聊天背景/设置卡背景/侧栏海报可用的图片）：id/名称/mime/体积/像素尺寸——'
+        + '设置部件（widgets）前先查这里，用返回的 id 引用素材（id 不能凭空编造）；'
+        + 'cover/widgets 支持 focus/zoom（如 focus:[0.5,0.35]、zoom:1.2），服务端按 width/height 折算裁剪坐标；素材上传仍由用户在界面完成。',
       parameters: {},
       output: {
         schema: {
@@ -1120,6 +1207,9 @@ export function createPresetToolDefs(
                   name: { type: 'string', required: true },
                   mime: { type: 'string', required: true },
                   size: { type: 'integer', required: true },
+                  // #112：像素尺寸（读文件头；未知格式缺省）
+                  width: { type: 'integer' },
+                  height: { type: 'integer' },
                   // #96（审计）：分层合成壁纸（#90）的 layers 元数据随 listWallpaperAssets 输出——
                   // additionalProperties:false 下未声明键会让宿主输出校验抛错（测试 stub 掩盖）
                   layers: {
@@ -1145,7 +1235,8 @@ export function createPresetToolDefs(
           text: value.assets.length === 0
             ? '壁纸库为空（素材上传由用户在界面完成）'
             : `壁纸库共 ${value.assets.length} 个素材（widgets 引用请用 id）：\n${value.assets
-              .map((a: { id: string; name: string; mime: string; size: number }) => `- ${a.id}：${a.name}（${a.mime}，${formatBytes(a.size)}）`)
+              .map((a: { id: string; name: string; mime: string; size: number; width?: number; height?: number }) =>
+                `- ${a.id}：${a.name}（${a.mime}，${formatBytes(a.size)}${a.width !== undefined && a.height !== undefined ? `，${a.width}×${a.height}` : ''}）`)
               .join('\n')}`,
         }],
       },

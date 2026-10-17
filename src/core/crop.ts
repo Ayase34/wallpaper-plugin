@@ -73,6 +73,43 @@ export function clampPan(panX: number, panY: number, frameW: number, frameH: num
 }
 
 /**
+ * #112 语义裁剪：焦点（图片内归一化坐标 0..1）+ 缩放 → 帧坐标绘制矩形。
+ * 语义 =「把图片的哪个点放到裁剪框中心」；zoom 与 UI 滑杆同义（1=恰好适配框内）。
+ * 结果钳制到图片覆盖整框（不产生透明边），四舍五入到 0.1px。
+ * @returns 帧坐标 { x, y, w, h }；参数非法返回 null
+ */
+export function cropFromFocus(
+  imgW: number,
+  imgH: number,
+  frameW: number,
+  frameH: number,
+  focusX: number,
+  focusY: number,
+  zoom = 1,
+  mode: 'contain' | 'cover' = 'contain',
+): { x: number; y: number; w: number; h: number } | null {
+  if (![imgW, imgH, frameW, frameH, focusX, focusY, zoom].every(Number.isFinite)) return null
+  if (imgW <= 0 || imgH <= 0 || frameW <= 0 || frameH <= 0 || zoom <= 0) return null
+  // contain = min（图片完整进框，可能留透明边——部件裁剪的 UI 语义）
+  // cover = max（框被图片完全盖住——封面必须铺满 3:1 卡片，不能出现透明条）
+  const fit = mode === 'cover'
+    ? Math.max(frameW / imgW, frameH / imgH)
+    : Math.min(frameW / imgW, frameH / imgH)
+  const scale = fit * zoom
+  const w = imgW * scale
+  const h = imgH * scale
+  // 限制焦点在图片内，且平移不超过「图片盖满框」的范围
+  const fx = Math.min(1, Math.max(0, focusX))
+  const fy = Math.min(1, Math.max(0, focusY))
+  const limitX = Math.max(0, (w - frameW) / 2)
+  const limitY = Math.max(0, (h - frameH) / 2)
+  const panX = Math.min(limitX, Math.max(-limitX, w * (0.5 - fx)))
+  const panY = Math.min(limitY, Math.max(-limitY, h * (0.5 - fy)))
+  const round = (n: number): number => Math.round(n * 10) / 10
+  return { x: round((frameW - w) / 2 + panX), y: round((frameH - h) / 2 + panY), w: round(w), h: round(h) }
+}
+
+/**
  * 裁剪平移钳制（#57 用户反馈：放大后无法继续拖动——硬边界）——按图片**当前显示尺寸**
  * （帧坐标，缩放后）动态限制平移范围：
  * - 图片 ≥ 框：允许拖到图片边缘（平移范围 ±(img-frame)/2）——放大后可把任意局部拖进视野；
