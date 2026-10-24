@@ -7,7 +7,7 @@
  * - 变更经 applySession 走 patchDraft——编译 cssText 变化即重挂（部件/素材变更天然生效）
  */
 import * as React from 'react'
-import { WIDGETS, MAX_ASSETS, MAX_ASSET_FILE_SIZE, type WidgetAssetRef, type WidgetParamDef } from '../core/widgets.ts'
+import { WIDGETS, MAX_ASSETS, MAX_ASSET_FILE_SIZE, MAX_IMAGE_URL_LENGTH, isSafeImageUrl, gradientOptions, type WidgetAssetRef, type WidgetParamDef } from '../core/widgets.ts'
 import { WIDGET_CROP_RATIOS } from '../core/crop.ts'
 import type { PresetWidget } from '../core/schema.ts'
 import { getController } from './controller.ts'
@@ -17,6 +17,9 @@ import { ConfirmDialog } from './confirm-dialog.tsx'
 import { LayerComposerDialog } from './layer-composer.tsx'
 // #89 素材缩略图（首帧 canvas）
 import { AssetThumb } from './asset-thumb.tsx'
+import { RotationPanel } from './rotation-panel.tsx'
+import { useI18n } from './use-i18n.ts'
+import { widgetLabel, widgetParamLabel } from './i18n.ts'
 
 export interface WidgetEditorProps {
   assets: WidgetAssetRef[]
@@ -31,6 +34,7 @@ export interface WidgetEditorProps {
 }
 
 export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
+  const { t, locale } = useI18n()
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const controller = getController()
   // #52：裁剪请求（选素材给部件时弹裁剪框；null = 未在裁剪）
@@ -42,19 +46,21 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
   // #96：素材列表最新引用（异步回调闭包读 props.assets 是旧快照——并发上传会顶掉前一个）
   const assetsRef = React.useRef(props.assets)
   assetsRef.current = props.assets
+  /** 壁纸 2.0：活动预设 id（决定轮换面板的「立即换下一张」是否可用）。 */
+  const activePresetId = controller?.getState().activePresetId ?? null
 
   const addAsset = async (file: File | undefined): Promise<void> => {
     if (file === undefined) return
     if (!file.type.startsWith('image/')) {
-      window.alert('只支持图片素材（image/*）')
+      window.alert(t('wg.uploadFailMime'))
       return
     }
     if (file.size > MAX_ASSET_FILE_SIZE) {
-      window.alert('素材超过上限（≤20MB）')
+      window.alert(t('wg.uploadFailSize'))
       return
     }
     if (assetsRef.current.length >= MAX_ASSETS) {
-      window.alert(`素材数量已达上限 ${MAX_ASSETS} 个`)
+      window.alert(t('wg.uploadFailCount', { max: MAX_ASSETS }))
       return
     }
     const result = await controller?.uploadAsset(file)
@@ -65,10 +71,10 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
       props.onAssetsChange([...assetsRef.current, { id: result.id, name: entryName, mime: result.mime ?? file.type }])
       // #106：内容级去重——同一张图重复上传时服务端复用已有素材（不存第二份）
       if (result.deduped === true) {
-        window.alert('该图片素材已存在，已自动复用现有素材（未新增重复文件）')
+        window.alert(t('wg.uploadDedup'))
       }
     } else {
-      window.alert(result?.error ?? '上传失败')
+      window.alert(result?.error ?? t('wg.uploadFailed'))
     }
   }
 
@@ -187,14 +193,25 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
 
   /** #89 素材缩略图组件（首帧 canvas；替换全量 <img>——见 asset-thumb.tsx 注释）。 */
 
-  const renderParam = (def: { id: string }, param: WidgetParamDef): React.ReactElement => {
-    const entry = widgetEntry(def.id)
-    const value = entry?.params[param.key] ?? param.default ?? ''
+  /** 参数当前值（含默认回退）：visibleWhen 判断与控件回显共用。 */
+  const paramValue = (defId: string, key: string): string => {
+    const entry = widgetEntry(defId)
+    const def = WIDGETS.find(widget => widget.id === defId)
+    const pdef = def?.params.find(item => item.key === key)
+    return entry?.params[key] ?? pdef?.default ?? ''
+  }
+
+  const renderParam = (def: { id: string }, param: WidgetParamDef): React.ReactElement | null => {
+    // 壁纸 2.0：来源切换决定显示哪一格（素材 / 链接 / 渐变互斥）
+    if (param.visibleWhen !== undefined && paramValue(def.id, param.visibleWhen.key) !== param.visibleWhen.equals) {
+      return null
+    }
+    const value = paramValue(def.id, param.key)
     if (param.type === 'asset') {
       // #52：选择素材 → 弹该部件的固定比例裁剪框（选"未选择"清空素材 + 裁剪参数）
       return (
         <label key={param.key} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--dsw-alias-label-tertiary, #999)' }}>
-          {param.label}
+          {widgetParamLabel(param.key) ?? param.label}
           <select
             aria-label={`${def.id} ${param.key}`}
             value={value}
@@ -217,16 +234,44 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
             }}
             style={{ fontSize: 11, padding: '2px 4px', borderRadius: 5, border: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)' }}
           >
-            <option value="">未选择</option>
+            <option value="">{t('wg.none')}</option>
             {props.assets.map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
           </select>
+        </label>
+      )
+    }
+    if (param.type === 'url') {
+      // 壁纸 2.0：图片链接（http/https；非法值不产出 CSS，保存时 schema 也会拒）
+      const valid = value === '' || isSafeImageUrl(value)
+      return (
+        <label key={param.key} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--dsw-alias-label-tertiary, #999)', flexWrap: 'wrap' }}>
+          {widgetParamLabel(param.key) ?? param.label}
+          <input
+            type="url"
+            aria-label={`${def.id} ${param.key}`}
+            value={value}
+            placeholder="https://…"
+            spellCheck={false}
+            maxLength={MAX_IMAGE_URL_LENGTH}
+            onChange={e => { setWidgetParam(def.id, param.key, e.target.value) }}
+            style={{
+              width: 220, fontSize: 11, padding: '2px 6px', borderRadius: 5,
+              border: `1px solid ${valid ? 'var(--dsw-alias-border-l2)' : 'var(--dsw-alias-state-error-primary, #d94c4c)'}`,
+              background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+            }}
+          />
+          {!valid && (
+            <span style={{ fontSize: 10, color: 'var(--dsw-alias-state-error-primary, #d94c4c)' }}>
+              {t('wg.urlInvalid')}
+            </span>
+          )}
         </label>
       )
     }
     if (param.type === 'select') {
       return (
         <label key={param.key} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--dsw-alias-label-tertiary, #999)' }}>
-          {param.label}
+          {widgetParamLabel(param.key) ?? param.label}
           <select
             aria-label={`${def.id} ${param.key}`}
             value={value}
@@ -242,7 +287,7 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
       // #49：不透明度滑杆（0–100%，步进 0.01 → 显示为整数百分比）
       return (
         <label key={param.key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--dsw-alias-label-tertiary, #999)' }}>
-          {param.label}
+          {widgetParamLabel(param.key) ?? param.label}
           <input
             type="range"
             aria-label={`${def.id} ${param.key}`}
@@ -261,7 +306,7 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
     }
     return (
       <label key={param.key} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--dsw-alias-label-tertiary, #999)' }}>
-        {param.label}
+        {widgetParamLabel(param.key) ?? param.label}
         <input
           type="number"
           aria-label={`${def.id} ${param.key}`}
@@ -279,14 +324,18 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
   /** #55：深色风格参数区（素材 + 不透明度；选素材走 dark 裁剪流 → 写 *Dark 参数）。 */
   const renderDarkSection = (def: { id: string }): React.ReactElement => {
     const entry = widgetEntry(def.id)
+    const source = entry?.params.source ?? 'asset'
     const darkAssetId = entry?.params.assetIdDark ?? ''
     const darkOpacity = entry?.params.opacityDark ?? '1'
+    const darkImageUrl = entry?.params.imageUrlDark ?? ''
+    const darkGradient = entry?.params.gradientDark ?? ''
     return (
       <div data-up-widget-dark style={{ paddingLeft: 10, marginTop: 4, borderLeft: '2px dashed var(--dsw-alias-border-l2)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--dsw-alias-label-secondary)' }}>深色风格</span>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--dsw-alias-label-secondary)' }}>{t('wg.darkLook')}</span>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {source === 'asset' && (
           <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--dsw-alias-label-tertiary, #999)' }}>
-            素材
+            {t('wg.asset')}
             <select
               aria-label={`${def.id} assetIdDark`}
               value={darkAssetId}
@@ -309,12 +358,45 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
               }}
               style={{ fontSize: 11, padding: '2px 4px', borderRadius: 5, border: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)' }}
             >
-              <option value="">未选择</option>
+              <option value="">{t('wg.none')}</option>
               {props.assets.map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
             </select>
           </label>
+          )}
+          {source === 'url' && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--dsw-alias-label-tertiary, #999)', flexWrap: 'wrap' }}>
+              {t('wg.darkLink')}
+              <input
+                type="url"
+                aria-label={`${def.id} imageUrlDark`}
+                value={darkImageUrl}
+                placeholder={t('wg.darkLinkPlaceholder')}
+                spellCheck={false}
+                maxLength={MAX_IMAGE_URL_LENGTH}
+                onChange={e => { setWidgetParam(def.id, 'imageUrlDark', e.target.value) }}
+                style={{
+                  width: 200, fontSize: 11, padding: '2px 6px', borderRadius: 5,
+                  border: `1px solid ${darkImageUrl === '' || isSafeImageUrl(darkImageUrl) ? 'var(--dsw-alias-border-l2)' : 'var(--dsw-alias-state-error-primary, #d94c4c)'}`,
+                  background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+                }}
+              />
+            </label>
+          )}
+          {source === 'gradient' && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--dsw-alias-label-tertiary, #999)' }}>
+              {t('wg.darkGradient')}
+              <select
+                aria-label={`${def.id} gradientDark`}
+                value={darkGradient}
+                onChange={e => { setWidgetParam(def.id, 'gradientDark', e.target.value) }}
+                style={{ fontSize: 11, padding: '2px 4px', borderRadius: 5, border: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)' }}
+              >
+                {gradientOptions().map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+          )}
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--dsw-alias-label-tertiary, #999)' }}>
-            不透明度
+            {t('wg.opacity')}
             <input
               type="range"
               aria-label={`${def.id} opacityDark`}
@@ -344,7 +426,7 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
   const toggleSchemeMode = (checked: boolean): void => {
     if (!checked && schemeMode) {
       setConfirmBox({
-        message: '关闭后将清除已设置的深色壁纸配置，确定？',
+        message: t('wg.darkClearConfirm'),
         action: () => {
           props.onWidgetsChange(props.widgets.map(widget => {
             const params = { ...widget.params }
@@ -364,14 +446,14 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
   return (
     <div data-up-widget-editor style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--dsw-alias-label-secondary)' }}>素材与部件</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--dsw-alias-label-secondary)' }}>{t('wg.assetsTitle')}</span>
         <button
           type="button"
           data-up-btn
           onClick={() => { fileInputRef.current?.click() }}
           style={{ padding: '3px 10px', fontSize: 11 }}
         >
-          添加素材
+          {t('wg.addAsset')}
         </button>
         <button
           type="button"
@@ -379,9 +461,9 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
           data-up-layer-open
           onClick={() => { setComposerOpen(true) }}
           style={{ padding: '3px 10px', fontSize: 11 }}
-          title="多张小块图片叠加合成一张壁纸"
+          title={t('wg.collageTitle')}
         >
-          图层合成壁纸
+          {t('wg.collage')}
         </button>
         <input
           ref={fileInputRef}
@@ -391,17 +473,17 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
           onChange={e => { addAsset(e.target.files?.[0]); e.target.value = '' }}
         />
         <span data-up-status style={{ fontSize: 10 }}>
-          {props.assets.length}/{MAX_ASSETS} 个素材
+          {t('wg.assetCount', { count: props.assets.length, max: MAX_ASSETS })}
         </span>
         <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--dsw-alias-label-secondary)', cursor: 'pointer', userSelect: 'none', marginLeft: 'auto' }}>
           <input
             type="checkbox"
-            aria-label="按明暗分别配置壁纸"
+            aria-label={t('wg.splitSchemesAria')}
             data-up-scheme-toggle
             checked={schemeChecked}
             onChange={e => { toggleSchemeMode(e.target.checked) }}
           />
-          <span>按明暗分别配置壁纸（浅色/深色）</span>
+          <span>{t('wg.splitSchemes')}</span>
         </label>
       </div>
       {props.assets.length > 0 && (
@@ -423,14 +505,14 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
                   type="button"
                   data-up-btn
                   data-up-asset-quick
-                  aria-label={`用 ${asset.name} 作聊天背景`}
+                  aria-label={t('wg.quickAria', { name: asset.name })}
                   onClick={() => { quickApplyAsChatBackground(asset.id) }}
                   style={{ padding: '0 6px', fontSize: 10, ...(chatUses ? { background: 'var(--dsw-alias-button-info-fill)', color: '#fff', borderColor: 'transparent' } : {}) }}
-                  title={chatUses ? '当前聊天背景' : '一键设为聊天背景'}
+                  title={chatUses ? t('wg.quickTitleCurrent') : t('wg.quickTitle')}
                 >
-                  {chatUses ? '✓ 聊天背景' : '设为聊天背景'}
+                  {chatUses ? t('wg.quickDone') : t('wg.quickDo')}
                 </button>
-                <button type="button" data-up-btn aria-label={`删除素材 ${asset.name}`} onClick={() => { removeAsset(asset.id) }} style={{ padding: '0 4px', fontSize: 10 }}>✕</button>
+                <button type="button" data-up-btn aria-label={t('wg.deleteAria', { name: asset.name })} onClick={() => { removeAsset(asset.id) }} style={{ padding: '0 4px', fontSize: 10 }}>✕</button>
               </span>
             )
           })}
@@ -439,7 +521,7 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
       {/* 修复轮 #33：素材上传 ≠ 生效——提示启用部件并选择素材；M3-3：指向快捷按钮 */}
       {props.assets.length > 0 && !props.widgets.some(w => Object.values(w.params).some(v => v !== '')) && (
         <div data-up-status style={{ fontSize: 10, color: 'var(--dsw-alias-state-warn-primary, #b7791f)' }}>
-          素材已上传但尚未生效——点击素材上的「设为聊天背景」一键启用，或在下方面板勾选部件并选择素材。
+          {t('wg.notActiveHint')}
         </div>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -450,23 +532,25 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--dsw-alias-label-primary)', cursor: 'pointer', userSelect: 'none' }}>
                 <input
                   type="checkbox"
-                  aria-label={`启用部件 ${def.name}`}
+                  aria-label={t('wg.enableAria', { name: widgetLabel(def.id, 'name') ?? def.name })}
                   checked={enabled}
                   onChange={e => { setWidgetEnabled(def.id, e.target.checked) }}
                 />
-                <span style={{ fontWeight: 600 }}>{def.name}</span>
-                <span style={{ fontWeight: 400, color: 'var(--dsw-alias-label-tertiary, #999)' }}>· {def.description}</span>
+                <span style={{ fontWeight: 600 }}>{widgetLabel(def.id, 'name') ?? def.name}</span>
+                <span style={{ fontWeight: 400, color: 'var(--dsw-alias-label-tertiary, #999)' }}>· {widgetLabel(def.id, 'description') ?? def.description}</span>
               </label>
               {enabled && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {/* #55：明暗分列时标注浅色区（深色区在下方虚线区块） */}
                   {schemeChecked && (
-                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--dsw-alias-label-secondary)', paddingLeft: 22 }}>浅色风格</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--dsw-alias-label-secondary)', paddingLeft: 22 }}>{t('wg.lightLook')}</span>
                   )}
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', paddingLeft: 22 }}>
                     {def.params.map(param => renderParam(def, param))}
                   </div>
                   {schemeChecked && renderDarkSection(def)}
+                  {/* 壁纸 2.0：轮换（本地偏好，不进预设/分享） */}
+                  <RotationPanel presetId={props.presetId} widgetId={def.id} isActive={activePresetId === props.presetId} />
                 </div>
               )}
             </div>
@@ -474,7 +558,7 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
         })}
       </div>
       <div data-up-status style={{ fontSize: 10 }}>
-        部件 CSS 由引擎生成（安全边界）；素材存于壁纸库（.ui-presets/assets，≤20MB/个），预设仅存引用——zip 导出自动内嵌素材。选素材给部件时按固定比例裁剪（未覆盖区域透明填充）。
+        {t('wg.footer')}
       </div>
       {/* #52/#53：裁剪对话框（fixed 覆盖层，z 1300 高于工作室；确认 = 参数写入，不落库） */}
       {cropRequest !== null && (
@@ -498,7 +582,7 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
       {confirmBox !== null && (
         <ConfirmDialog
           message={confirmBox.message}
-          confirmLabel="清除"
+          confirmLabel={t('wg.clear')}
           onConfirm={() => {
             const action = confirmBox.action
             setConfirmBox(null)
@@ -512,7 +596,7 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
         <div
           data-up-delete-choice
           role="dialog"
-          aria-label="删除素材"
+          aria-label={t('wg.deleteAriaShort')}
           tabIndex={-1}
           onKeyDownCapture={e => {
             if (e.key === 'Escape') {
@@ -534,10 +618,10 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
             }}
           >
             <span style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-              {`素材正被 ${deleteChoice.refs.length} 个其他预设使用（${deleteChoice.refs.map(r => r.name).join('、')}）。删除方式？`}
+              {t('wg.deleteUsedIn', { count: deleteChoice.refs.length, names: deleteChoice.refs.map(r => r.name).join(locale === 'en' ? ', ' : '、') })}
             </span>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button type="button" data-up-btn onClick={() => { setDeleteChoice(null) }}>取消</button>
+              <button type="button" data-up-btn onClick={() => { setDeleteChoice(null) }}>{t('wg.cancel')}</button>
               <button
                 type="button" data-up-btn
                 onClick={() => {
@@ -547,7 +631,7 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
                   void controller?.deleteAsset(choice.assetId, { presetId: props.presetId })
                 }}
               >
-                仅从本预设移除
+                {t('wg.removeFromPreset')}
               </button>
               <button
                 type="button" data-up-btn data-up-btn-primary
@@ -558,7 +642,7 @@ export function WidgetEditor(props: WidgetEditorProps): React.ReactElement {
                   void controller?.deleteAsset(choice.assetId)
                 }}
               >
-                彻底删除
+                {t('wg.deletePermanently')}
               </button>
             </div>
           </div>

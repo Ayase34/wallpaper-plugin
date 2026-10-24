@@ -1,9 +1,9 @@
 {
   "name": "wallpaper-plugin",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
-  "description": "DSH 壁纸插件：预设/主题管理 + 壁纸素材库",
+  "description": "DSH 美化插件：预设/主题管理 + 壁纸 2.0（链接/渐变/轮换）+ 27 旋钮层 + 中英双语",
   "author": "Yunicon <ayase112594@gmail.com>",
   "main": "./.dsh-plugin/index.mjs",
   "exports": {

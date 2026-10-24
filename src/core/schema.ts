@@ -8,7 +8,7 @@
  * 纯逻辑模块：Node / 浏览器 / 测试三端共用，零外部依赖（core 内部引用 widgets 目录）。
  */
 
-import { WIDGETS, findWidget, MAX_ASSETS, MAX_ASSET_DATAURL_LENGTH } from './widgets.ts'
+import { WIDGETS, findWidget, MAX_ASSETS, MAX_ASSET_DATAURL_LENGTH, MAX_IMAGE_URL_LENGTH, isSafeImageUrl, gradientOptions } from './widgets.ts'
 
 /** 令牌双值对：明暗两套都必须提供。 */
 export interface TokenOverride {
@@ -384,6 +384,11 @@ export function validatePreset(raw: unknown): ValidationResult {
                 errors.push(`widgets[${i}] 参数 ${param.key} 不能大于 ${param.max}`)
               }
             }
+          } else if (param.type === 'url') {
+            // 壁纸 2.0：图片链接必须 http/https 且不含能闭合 url()/注释的字符
+            if (value !== '' && !isSafeImageUrl(value)) {
+              errors.push(`widgets[${i}] 参数 ${param.key} 必须是 http/https 图片链接（≤${MAX_IMAGE_URL_LENGTH} 字符，禁引号/括号/空白）`)
+            }
           } else if (param.type === 'select' && param.options !== undefined && !param.options.some(o => o.value === value)) {
             errors.push(`widgets[${i}] 参数 ${param.key} 不在选项内`)
           }
@@ -396,6 +401,25 @@ export function validatePreset(raw: unknown): ValidationResult {
           if (typeof value !== 'string' || !/^[+-]?(\d+(\.\d+)?|\.\d+)$/.test(value.trim())) {
             errors.push(`widgets[${i}] 参数 ${key} 必须是十进制数字字符串`)
           }
+        }
+        // 壁纸 2.0：深色来源参数由「深色风格」区渲染、不在 def.params 里——按同款规则补校验，
+        // 避免「UI 显示不合法态但保存通过」或悬空素材引用（widgetCss 本身已做兜底过滤）。
+        const darkAssetId = widget.params.assetIdDark
+        if (darkAssetId !== undefined) {
+          if (typeof darkAssetId !== 'string') {
+            errors.push(`widgets[${i}] 参数 assetIdDark 必须是字符串`)
+          } else if (darkAssetId !== '' && !assetIds.has(darkAssetId)) {
+            errors.push(`widgets[${i}] 参数 assetIdDark 引用了不存在的素材 ${darkAssetId}`)
+          }
+        }
+        const darkUrl = widget.params.imageUrlDark
+        if (darkUrl !== undefined && (typeof darkUrl !== 'string' || (darkUrl !== '' && !isSafeImageUrl(darkUrl)))) {
+          errors.push(`widgets[${i}] 参数 imageUrlDark 必须是 http/https 图片链接`)
+        }
+        const darkGradient = widget.params.gradientDark
+        if (darkGradient !== undefined
+          && (typeof darkGradient !== 'string' || !gradientOptions().some(o => o.value === darkGradient))) {
+          errors.push(`widgets[${i}] 参数 gradientDark 不在渐变档位内`)
         }
       }
     }

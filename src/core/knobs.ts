@@ -205,9 +205,10 @@ export const KNOBS: KnobDef[] = [
     ],
   },
   {
-    id: 'settings-card', category: 'spatial', name: '设置卡面', description: '设置面板卡片底色与描边', control: 'color',
-    bundle: ['--dsw-alias-settings-card-fill', '--dsw-alias-settings-card-stroke'],
-    derives: { '--dsw-alias-settings-card-stroke': { mode: 'alpha', amount: 0.14 } },
+    id: 'settings-card', category: 'spatial', name: '设置卡面', description: '设置面板卡片底色（描边留高级令牌）', control: 'color',
+    // #113：描边不再进束——「边框」用 alpha(fill) 派生出来是半透明填充色而不是边框线，
+    // 必然与手调描边冲突（旋钮行永远挂「束内已单独调整」）。描边交给高级令牌区。
+    bundle: ['--dsw-alias-settings-card-fill'],
   },
   {
     id: 'markdown-surfaces', category: 'spatial', name: '代码与引用面', description: '代码块/行内代码/引用/标签底色（自动分层）', control: 'color',

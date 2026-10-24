@@ -28,6 +28,52 @@ export const MAX_ASSETS = 100
 export const MAX_ASSET_FILE_SIZE = 20 * 1024 * 1024
 export const MAX_ASSET_DATAURL_LENGTH = 28_000_000
 
+/** 图片链接上限（字符）——超长链接多为带签名的 CDN，截断反而更糟，直接拒绝并提示用素材库。 */
+export const MAX_IMAGE_URL_LENGTH = 2048
+
+/**
+ * 内置渐变档位（2026-10，壁纸 2.0）：**档位是 id、字面量在代码里**——用户只能选，不能填 CSS，
+ * 注入面为零（与「图片链接」同属「无素材也能出一张氛围底」的能力）。
+ */
+export const GRADIENT_PRESETS: Array<{ id: string; name: string; css: string }> = [
+  { id: 'aurora', name: '极光', css: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' },
+  { id: 'ocean', name: '深海', css: 'linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)' },
+  { id: 'dusk', name: '暮色', css: 'linear-gradient(135deg, #232526 0%, #414345 100%)' },
+  { id: 'sunset', name: '落日', css: 'linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%)' },
+  { id: 'forest', name: '森林', css: 'linear-gradient(135deg, #134e5e 0%, #71b280 100%)' },
+  { id: 'rose', name: '玫瑰', css: 'linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%)' },
+  { id: 'ember', name: '余烬', css: 'linear-gradient(135deg, #f83600 0%, #f9d423 100%)' },
+  { id: 'paper', name: '纸白', css: 'linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%)' },
+]
+
+/** 渐变 id → CSS 字面量（未知 id 返回空串＝不产出样式）。 */
+export function gradientCss(id: string): string {
+  const preset = GRADIENT_PRESETS.find(item => item.id === id)
+  return preset !== undefined ? preset.css : ''
+}
+
+/** 渐变下拉选项（含「不使用」空档；空值 = 不产出）。 */
+export function gradientOptions(): Array<{ label: string; value: string }> {
+  return [{ label: '（不使用）', value: '' }, ...GRADIENT_PRESETS.map(item => ({ label: item.name, value: item.id }))]
+}
+
+/**
+ * 图片链接白名单：仅 http/https，且不得含空白 / 引号 / 圆括号 / 尖括号 / 反斜杠。
+ * 理由：该值最终插进 `url("…")` 与 CSS 注释标记——上述字符能闭合 url() 或注释。
+ * data: URL 不走这里（走素材库的严格 base64 校验）。
+ */
+export function isSafeImageUrl(value: string): boolean {
+  if (value === '' || value.length > MAX_IMAGE_URL_LENGTH) return false
+  if (!/^https?:\/\//i.test(value)) return false
+  return /^[\x21-\x7e]+$/.test(value) && !/["'()<>\\`\s]/.test(value)
+}
+
+/** 图片链接 → CSS url()（非法或空 → 空串，调用方据此不产出样式）。 */
+export function imageUrlCss(value: string | undefined): string {
+  if (value === undefined || !isSafeImageUrl(value)) return ''
+  return `url("${value}")`
+}
+
 /** 素材的 CSS url：内嵌 dataUrl 优先，否则走壁纸库文件路由（同源）。
  * review P1-1（全量评审）纵深防御：dataUrl 非严格 base64 形态（含引号/分号等）→ 拒绝产出
  * （schema 已收紧校验；此处兜底防绕过——CSS 注入面）。 */
@@ -44,12 +90,14 @@ export function assetCssUrl(asset: WidgetAssetRef | undefined): string {
 export interface WidgetParamDef {
   key: string
   label: string
-  type: 'asset' | 'number' | 'select' | 'range'
+  type: 'asset' | 'number' | 'select' | 'range' | 'url'
   default?: string
   min?: number
   max?: number
   step?: number
   options?: Array<{ label: string; value: string }>
+  /** 按另一个参数的值决定是否显示（如「素材」只在 source=asset 时显示）。 */
+  visibleWhen?: { key: string; equals: string }
 }
 
 export interface WidgetDef {
@@ -59,6 +107,25 @@ export interface WidgetDef {
   params: WidgetParamDef[]
 }
 
+/** 图像类部件共用参数（壁纸 2.0）：来源三选一 + 对应字段 + 不透明度。
+ * `assetId` 保留原键名与语义（旧预设无 source → 走默认 asset，行为不变）。 */
+function imageParams(): WidgetParamDef[] {
+  return [
+    {
+      key: 'source', label: '图片', type: 'select', default: 'asset',
+      options: [
+        { label: '本地素材', value: 'asset' },
+        { label: '图片链接', value: 'url' },
+        { label: '内置渐变', value: 'gradient' },
+      ],
+    },
+    { key: 'assetId', label: '素材', type: 'asset', default: '', visibleWhen: { key: 'source', equals: 'asset' } },
+    { key: 'imageUrl', label: '链接', type: 'url', default: '', visibleWhen: { key: 'source', equals: 'url' } },
+    { key: 'gradient', label: '渐变', type: 'select', default: '', options: gradientOptions(), visibleWhen: { key: 'source', equals: 'gradient' } },
+    { key: 'opacity', label: '不透明度', type: 'range', default: '1', min: 0, max: 1, step: 0.01 },
+  ]
+}
+
 /** 固定部件目录（用户拍板 #49：全局背景图/顶部强调色条/品牌标已移除——仅保留 3 个背景类部件；
  * 图像类部件带「不透明度」滑杆，CSS 由引擎生成（安全边界）。 */
 export const WIDGETS: WidgetDef[] = [
@@ -66,28 +133,19 @@ export const WIDGETS: WidgetDef[] = [
     id: 'chat-background',
     name: '聊天背景图',
     description: '会话区背景壁纸',
-    params: [
-      { key: 'assetId', label: '素材', type: 'asset' },
-      { key: 'opacity', label: '不透明度', type: 'range', default: '1', min: 0, max: 1, step: 0.01 },
-    ],
+    params: imageParams(),
   },
   {
     id: 'settings-background',
     name: '设置卡背景图',
     description: '设置窗口背景壁纸',
-    params: [
-      { key: 'assetId', label: '素材', type: 'asset' },
-      { key: 'opacity', label: '不透明度', type: 'range', default: '1', min: 0, max: 1, step: 0.01 },
-    ],
+    params: imageParams(),
   },
   {
     id: 'sidebar-poster',
     name: '侧栏海报',
     description: '左侧导航栏海报背景',
-    params: [
-      { key: 'assetId', label: '素材', type: 'asset' },
-      { key: 'opacity', label: '不透明度', type: 'range', default: '1', min: 0, max: 1, step: 0.01 },
-    ],
+    params: imageParams(),
   },
 ]
 
@@ -161,8 +219,17 @@ export function widgetCss(
     case 'sidebar-poster': {
       const selector = WIDGET_TARGET_SELECTOR[widgetId]
       const washToken = WIDGET_WASH_TOKEN[widgetId]
-      const url = assetUrl('assetId')
-      const urlDark = assetUrl('assetIdDark')
+      // 壁纸 2.0：来源三选一——本地素材 / 图片链接 / 内置渐变（旧预设无 source → 素材，行为不变）
+      const source = p.source === 'url' || p.source === 'gradient' ? p.source : 'asset'
+      const imageFor = (urlKey: string, gradientKey: string, assetKey: string): string => {
+        if (source === 'url') return imageUrlCss(p[urlKey])
+        if (source === 'gradient') return gradientCss(p[gradientKey] ?? '')
+        return assetUrl(assetKey)
+      }
+      const url = imageFor('imageUrl', 'gradient', 'assetId')
+      const urlDark = imageFor('imageUrlDark', 'gradientDark', 'assetIdDark')
+      // 裁剪只对本地素材生效：链接/渐变没有「原始像素坐标」语义，且链接里的 ':' 会破坏裁剪标记解析
+      const canCrop = source === 'asset'
       // #52b（用户反馈 #53）：已裁剪 → 静态 CSS 不产出（渲染由浏览器 controller 按元素
       // 实际尺寸动态计算）——只产出裁剪标记（嵌入 cssText：驱动 patchDraft 差分 →
       // controller 解析并设置目标元素内联样式）；标记值变化即触发重同步。
@@ -175,8 +242,8 @@ export function widgetCss(
       const cropYD = cropNumStr('cropYDark')
       const cropWD = cropNumStr('cropWDark')
       const cropHD = cropNumStr('cropHDark')
-      const hasCrop = cropX !== '' && cropW !== ''
-      const hasCropDark = cropXD !== '' && cropWD !== ''
+      const hasCrop = canCrop && cropX !== '' && cropW !== ''
+      const hasCropDark = canCrop && cropXD !== '' && cropWD !== ''
       const parts: string[] = []
       // 浅色/默认
       if (hasCrop) {

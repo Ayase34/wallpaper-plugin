@@ -4,10 +4,13 @@ import assert from 'node:assert/strict'
 import { seedBuiltinPreset, buildBuiltinPreset, BUILTIN_PRESET_ID } from '../src/core/seed.ts'
 import { validatePreset } from '../src/core/schema.ts'
 
-/** 假素材：字节 = 名称长度填充（内容哈希用长度近似即可）。 */
+/** 假素材：字节 = 名称长度填充（内容哈希用长度近似即可）。
+ * 含深色聊天底图（asset-dsnm-chat-dark）——生产内置素材就是 4 张，早期 fixture 只有 3 张，
+ * 会让「深色素材引用是否悬空」这条校验失去意义。 */
 function fakeAssets() {
   return [
     { id: 'asset-dsnm-chat', name: 'DeepSeek娘_聊天背景.jpg', mime: 'image/jpeg', bytes: new Uint8Array([1, 1, 1, 1]) },
+    { id: 'asset-dsnm-chat-dark', name: 'DeepSeek娘_聊天背景_深色.jpg', mime: 'image/jpeg', bytes: new Uint8Array([4, 4, 4, 4, 4]) },
     { id: 'asset-dsnm-sidebar', name: 'DeepSeek娘_侧栏海报.jpg', mime: 'image/jpeg', bytes: new Uint8Array([2, 2, 2]) },
     { id: 'asset-dsnm-settings', name: 'DeepSeek娘_设置卡背景图.jpg', mime: 'image/jpeg', bytes: new Uint8Array([3, 3]) },
   ]
@@ -43,18 +46,23 @@ test('#108 全新环境：三张壁纸落库 + 写入 default 预设 + 自动应
   const { state, port } = memoryPort({ activePresetId: null })
   const result = seedBuiltinPreset(port, fakeAssets(), fakeHash)
   assert.equal(result.seeded, true)
-  assert.deepEqual(result.assetsWritten.sort(), ['asset-dsnm-chat', 'asset-dsnm-settings', 'asset-dsnm-sidebar'])
+  assert.deepEqual(result.assetsWritten.sort(), ['asset-dsnm-chat', 'asset-dsnm-chat-dark', 'asset-dsnm-settings', 'asset-dsnm-sidebar'])
   assert.equal(result.assetsKept.length, 0)
   assert.equal(result.activated, true, '无活动预设时应自动应用出厂预设')
   assert.equal(state.activePresetId, BUILTIN_PRESET_ID)
   const preset = state.presets.get(BUILTIN_PRESET_ID)
   assert.equal(preset.name, '默认')
-  assert.equal(preset.assets.length, 3)
+  assert.equal(preset.assets.length, 4)
   assert.equal(preset.widgets.length, 3)
   assert.ok(preset.cover !== undefined)
-  // 部件引用必须全部指向内置素材（悬空引用会被 schema 拒）
+  // 部件引用必须全部指向内置素材（悬空引用会被 schema 拒）——浅色与深色两套都要查
   const ids = new Set(preset.assets.map(a => a.id))
-  for (const widget of preset.widgets) assert.ok(ids.has(widget.params.assetId), `${widget.id} 引用应存在`)
+  for (const widget of preset.widgets) {
+    assert.ok(ids.has(widget.params.assetId), `${widget.id} 引用应存在`)
+    if (widget.params.assetIdDark !== undefined) {
+      assert.ok(ids.has(widget.params.assetIdDark), `${widget.id} 深色引用应存在`)
+    }
+  }
   assert.equal(validatePreset(preset).ok, true)
 })
 
@@ -67,7 +75,7 @@ test('#108 库中已有同名「默认」→ 不写预设（保留用户版本�
   assert.equal(state.presets.get('default'), existing, '原预设对象必须原样保留')
   assert.equal(state.activeWrites.length, 0, '不抢用户的活动预设')
   // #109：素材与预设解耦——缺失的内置素材要补齐，否则老用户永远拿不到修好的图
-  assert.deepEqual(result.assetsWritten.sort(), ['asset-dsnm-chat', 'asset-dsnm-settings', 'asset-dsnm-sidebar'])
+  assert.deepEqual(result.assetsWritten.sort(), ['asset-dsnm-chat', 'asset-dsnm-chat-dark', 'asset-dsnm-settings', 'asset-dsnm-sidebar'])
 })
 
 test('#109 老用户升级：素材内容变了 → 预设已存在也会更新素材', () => {
@@ -91,6 +99,7 @@ test('#108 幂等：素材已存在且内容一致 → 不重写；预设仍会�
   const { state, port } = memoryPort({
     assets: {
       'asset-dsnm-chat': { id: 'asset-dsnm-chat', name: 'x', mime: 'image/jpeg', size: 4, sha256: 'len-4' },
+      'asset-dsnm-chat-dark': { id: 'asset-dsnm-chat-dark', name: 'x', mime: 'image/jpeg', size: 5, sha256: 'len-5' },
       'asset-dsnm-sidebar': { id: 'asset-dsnm-sidebar', name: 'x', mime: 'image/jpeg', size: 3, sha256: 'len-3' },
       'asset-dsnm-settings': { id: 'asset-dsnm-settings', name: 'x', mime: 'image/jpeg', size: 2, sha256: 'len-2' },
     },
@@ -99,7 +108,7 @@ test('#108 幂等：素材已存在且内容一致 → 不重写；预设仍会�
   const result = seedBuiltinPreset(port, assets, fakeHash)
   assert.equal(result.seeded, true)
   assert.equal(result.assetsWritten.length, 0, '内容一致不应重写素材文件')
-  assert.equal(result.assetsKept.length, 3)
+  assert.equal(result.assetsKept.length, 4)
   assert.equal(state.assetWrites.length, 0)
 })
 
@@ -126,11 +135,34 @@ test('#108 已有其他活动预设 → 只播种不抢焦点', () => {
   assert.equal(state.activeWrites.length, 0)
 })
 
+test('#113 出厂封面是「满幅 3:1 摆放」（不是 16:9 源选区）', () => {
+  const preset = buildBuiltinPreset(fakeAssets())
+  const cover = preset.cover
+  assert.ok(cover !== undefined)
+  assert.equal(cover.assetId, 'asset-dsnm-chat')
+  const x = Number(cover.cropX), y = Number(cover.cropY), w = Number(cover.cropW), h = Number(cover.cropH)
+  assert.ok(Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(w) && Number.isFinite(h))
+  assert.ok(w >= 1920, '宽度应铺满封面帧（1920）')
+  assert.ok(h >= 640, '高度应覆盖封面帧（640）')
+  assert.ok(Math.abs((x + w / 2) - 960) < 1, '水平居中')
+  assert.ok(Math.abs((y + h / 2) - 320) < 1, '垂直居中')
+  // 旧值（16:9 的 2501.8×1408）不得回归
+  assert.notEqual(w, 2501.8)
+})
+
 test('#108 buildBuiltinPreset 不依赖外部素材内容（纯结构）', () => {
   const preset = buildBuiltinPreset(fakeAssets())
   assert.equal(preset.id, 'default')
   assert.deepEqual(preset.tags, ['builtin', 'style:海洋清爽'])
-  assert.equal(Object.keys(preset.tokens).length, 15, '令牌集应为出厂 15 项')
+  assert.equal(Object.keys(preset.tokens).length, 36, '令牌集应为出厂 36 项（2026-10 补齐语义层）')
   // 令牌来源是 DEMO_DEFAULT_TOKENS——与出厂兜底一致（#107 的徽标修复值）
   assert.deepEqual(preset.tokens['--dsw-specific-sidebar-nav-item-active-accent'], { light: 'rgb(250, 252, 255)', dark: 'rgb(18, 34, 64)' })
+  // 2026-10：语义层覆盖（状态色 / 菜单 / 代码面 / 浮层），出厂外观在这些面上不再回落到宿主灰蓝
+  for (const name of [
+    '--dsw-specific-menu', '--dsw-alias-border-l2',
+    '--dsw-alias-state-error-primary', '--dsw-alias-state-warn-primary', '--dsw-alias-state-success-primary',
+    '--dsw-alias-markdown-code-block', '--dsw-alias-toast-bg', '--dsw-alias-settings-card-fill',
+  ]) {
+    assert.ok(preset.tokens[name] !== undefined, `应包含语义令牌 ${name}`)
+  }
 })

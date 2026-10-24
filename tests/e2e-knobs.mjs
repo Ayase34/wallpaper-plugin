@@ -47,15 +47,32 @@ const studio = page.locator('[data-up-studio]')
 await studio.waitFor({ timeout: 10000 })
 await studio.locator('[data-up-card]').first().waitFor({ timeout: 10000 })
 
-// #74：旋钮层编辑入口已注释（AI 接管）——验证入口隐藏 + 原始令牌直编链路仍可用
+// M2-1 恢复：旋钮层在编辑器顶部（决策 E）——6 类 26 旋钮，默认单值双写
 const demoCard = studio.locator('[data-up-card]', { hasText: '默认' }).first()
 await demoCard.getByRole('button', { name: '编辑' }).click()
 await studio.getByLabel('预设名称').waitFor({ timeout: 10000 })
-check('旋钮层已移除（无 [data-up-knob-category]）', await studio.locator('[data-up-knob-category]').count() === 0)
-check('旋钮行已移除（无 [data-up-knob]）', await studio.locator('[data-up-knob]').count() === 0)
-check('「空间定位」等旋钮类别不可见', await studio.getByText('空间定位').count() === 0)
+check('旋钮层已恢复（≥20 个旋钮）', await studio.locator('[data-up-knob]').count() >= 20)
+check('6 个旋钮类别', await studio.locator('[data-up-knob-category]').count() === 6)
+check('默认单值双写（无亮/暗双块）', await studio.getByLabel('主色 亮 值').count() === 0)
 
-// 原始令牌区可展开 → 直接编辑仍生效（预览联动）
+// 旋钮改主色：一次写品牌束三个令牌（品牌主色 + 信息按钮 + 业务状态）
+const accentInput = studio.getByLabel('主色 值').first()
+await typeInto(accentInput, '#00aa88')
+await page.waitForTimeout(400)
+check('主色旋钮回读新值', (await accentInput.inputValue()) === '#00aa88')
+const brandFill = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--dsw-alias-button-info-fill').trim().toLowerCase())
+check(`旋钮即时写入令牌（info-fill=${brandFill}）`, brandFill === '#00aa88' || brandFill === 'rgb(0, 170, 136)')
+
+// 全局「明暗分别设置」：打开后并排亮/暗，只改暗色不得覆盖亮色
+await studio.locator('[data-up-knob-dual]').check()
+const darkInput = studio.getByLabel('主色 暗 值').first()
+await darkInput.waitFor({ timeout: 5000 })
+await typeInto(darkInput, '#112233')
+await page.waitForTimeout(300)
+check('分别设置出现亮/暗双块', await studio.getByLabel('主色 亮 值').count() === 1)
+check('暗色不覆盖亮色', (await studio.getByLabel('主色 亮 值').first().inputValue()) === '#00aa88')
+
+// 旋钮不夺权：原始令牌区仍可展开直编（预览联动）
 check('原始令牌默认折叠（无令牌行）', (await studio.locator('[data-up-token-row]').count()) === 0)
 await studio.locator('[data-up-advanced-head]').click()
 await page.waitForTimeout(300)
@@ -66,13 +83,18 @@ await studio.locator('[data-up-studio-status]').getByText('预览中（未保存
 await page.waitForTimeout(400)
 // #75：预览已移除——草稿全局生效（body 即预览）
 const draftBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor)
-check(`原始令牌直编仍生效（body=${draftBg}）`, draftBg === 'rgb(18, 52, 86)' || draftBg === 'rgb(6, 14, 30)')
+check(`原始令牌直编仍生效（body=${draftBg}）`, draftBg === 'rgb(18, 52, 86)')
 
-// 保存 → 落盘令牌
+// 保存 → 落盘：品牌束三令牌 + 明暗双值 + 直编令牌
 await studio.getByRole('button', { name: '保存' }).click()
 await studio.locator('[data-up-studio-status]').getByText(/已另存为「默认（自定义）」/).waitFor({ timeout: 15000 })
 const saved = await (await fetch(`${BASE}/ui-presets/presets/default-custom`)).json()
-check('落盘含直编令牌', saved.preset?.tokens?.['--dsw-alias-bg-base']?.light === '#123456')
+const savedTokens = saved.preset?.tokens ?? {}
+check('品牌束三令牌同写（亮）', ['--dsw-alias-brand-primary', '--dsw-alias-button-info-fill', '--dsw-alias-state-business-primary']
+  .every(name => savedTokens[name]?.light === '#00aa88'))
+check('品牌束三令牌同写（暗）', ['--dsw-alias-brand-primary', '--dsw-alias-button-info-fill', '--dsw-alias-state-business-primary']
+  .every(name => savedTokens[name]?.dark === '#112233'))
+check('落盘含直编令牌', savedTokens['--dsw-alias-bg-base']?.light === '#123456')
 
 console.log(`\n${pass} checks passed`)
 if (errors.length > 0) console.log('browser-errors: ' + JSON.stringify(errors.slice(0, 5)))

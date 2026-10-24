@@ -2,7 +2,7 @@
 // .mjs 纯 JS。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { coverSvgFor, coverDataUrlFor, coverImageSourceFor, COVER_RATIO } from '../src/core/cover.ts'
+import { coverSvgFor, coverDataUrlFor, coverImageSourceFor, coverDestRect, COVER_RATIO, COVER_FRAME } from '../src/core/cover.ts'
 
 const preset = {
   schemaVersion: 1,
@@ -52,4 +52,31 @@ test('#56 coverImageSourceFor：手设封面（内嵌 dataUrl / 文件路由）�
   assert.equal(coverImageSourceFor({ ...preset, cover: { assetId: 'nope' }, assets: [] }), coverDataUrlFor(preset))
   // 无 cover → 自动生成
   assert.equal(coverImageSourceFor(preset), coverDataUrlFor(preset))
+})
+
+test('#113 coverDestRect：crop 是「帧里的摆放矩形」→ 目标矩形（帧 1920×640 → 画布 900×300）', () => {
+  assert.deepEqual(COVER_FRAME, { w: 1920, h: 640 })
+  // 满幅 3:1：宽度铺满、垂直溢出居中 → 目标 900×506.5，y=-103.3
+  const rect = coverDestRect({ x: 0, y: -220.3, w: 1920, h: 1080.6 })
+  assert.ok(rect !== null)
+  assert.equal(rect.x, 0)
+  assert.equal(rect.w, 900)
+  assert.ok(Math.abs(rect.y - (-103.27)) < 0.1, String(rect.y))
+  assert.ok(Math.abs(rect.h - 506.53) < 0.1, String(rect.h))
+  // 目标矩形必须覆盖整个画布（否则封面会露透明边）
+  assert.ok(rect.y <= 0 && rect.y + rect.h >= 300)
+
+  // 语义是「摆放」不是「源选区」：同样的 3:1 裁剪，宽度应等于画布宽（而不是 533 的源选区）
+  const uiCrop = coverDestRect({ x: 391.4, y: 0, w: 1137.2, h: 640 })
+  assert.ok(uiCrop !== null)
+  assert.ok(Math.abs(uiCrop.w - 533) < 1, '宽度按帧比例缩放')
+  assert.ok(Math.abs(uiCrop.x - 183.5) < 1, '左侧留白按帧比例缩放')
+})
+
+test('#113 coverDestRect：非法参数返回 null（调用方回退未裁剪图源）', () => {
+  assert.equal(coverDestRect({ x: 0, y: 0, w: 0, h: 640 }), null)
+  assert.equal(coverDestRect({ x: 0, y: 0, w: 1920, h: 0 }), null)
+  assert.equal(coverDestRect({ x: Number.NaN, y: 0, w: 1920, h: 640 }), null)
+  assert.equal(coverDestRect({ x: 0, y: 0, w: 1920, h: 640 }, { w: 0, h: 300 }), null)
+  assert.equal(coverDestRect({ x: 0, y: 0, w: 1920, h: 640 }, { w: 900, h: 300 }, { w: 0, h: 640 }), null)
 })

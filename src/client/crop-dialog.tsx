@@ -17,6 +17,7 @@ import {
   CROP_ZOOM_MAX,
   type CropRatio,
 } from '../core/crop.ts'
+import { useI18n } from './use-i18n.ts'
 
 export interface CropRequest {
   widgetId: string
@@ -42,6 +43,7 @@ const FRAME_MAX_LONG = 1920
 
 export function CropDialog(props: CropDialogProps): React.ReactElement {
   const { request } = props
+  const { t } = useI18n()
   const frame = React.useMemo(() => cropFrameSize(request.ratio, FRAME_MAX_LONG), [request.ratio])
   const ratioLabel = cropRatioLabel(request.ratio)
 
@@ -57,7 +59,7 @@ export function CropDialog(props: CropDialogProps): React.ReactElement {
   React.useEffect(() => {
     const img = new Image()
     img.onload = () => { setImage(img) }
-    img.onerror = () => { setLoadError('图片加载失败（素材可能已被删除）') }
+    img.onerror = () => { setLoadError(t('crop.loadFailed')) }
     img.src = request.sourceUrl
     return () => { img.onload = null; img.onerror = null }
   }, [request.sourceUrl])
@@ -126,7 +128,7 @@ export function CropDialog(props: CropDialogProps): React.ReactElement {
       ref={rootRef}
       data-up-crop
       role="dialog"
-      aria-label={`图片裁剪：${request.widgetName}（${ratioLabel}）`}
+      aria-label={t('crop.aria', { name: request.widgetName, ratio: ratioLabel })}
       tabIndex={-1}
       onKeyDownCapture={e => {
         if (e.key === 'Escape') {
@@ -149,9 +151,9 @@ export function CropDialog(props: CropDialogProps): React.ReactElement {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 14, fontWeight: 600 }}>图片裁剪：{request.widgetName}</span>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>{t('crop.title', { name: request.widgetName })}</span>
           <span data-up-crop-ratio style={{ fontSize: 12, color: 'var(--dsw-alias-label-tertiary, #999)' }}>
-            固定比例 {ratioLabel}（{frame.w}×{frame.h}）· 黑框内即实际应用范围；未覆盖区域透明
+            {t('crop.ratioHint', { ratio: ratioLabel, w: frame.w, h: frame.h })}
           </span>
         </div>
 
@@ -182,15 +184,15 @@ export function CropDialog(props: CropDialogProps): React.ReactElement {
         )}
 
         {image === null && loadError === null && (
-          <div data-up-status style={{ fontSize: 12 }}>加载图片中…</div>
+          <div data-up-status style={{ fontSize: 12 }}>{t('crop.loading')}</div>
         )}
 
         {image !== null && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button type="button" data-up-btn aria-label="缩小" onClick={() => { setZoomPercent(zoomPercent - 10) }} style={{ padding: '2px 10px' }}>−</button>
+            <button type="button" data-up-btn aria-label={t('crop.zoomOut')} onClick={() => { setZoomPercent(zoomPercent - 10) }} style={{ padding: '2px 10px' }}>−</button>
             <input
               type="range"
-              aria-label="缩放"
+              aria-label={t('crop.zoom')}
               min={CROP_ZOOM_MIN * 100}
               max={CROP_ZOOM_MAX * 100}
               step={5}
@@ -198,14 +200,14 @@ export function CropDialog(props: CropDialogProps): React.ReactElement {
               onChange={e => { setZoomPercent(Number(e.target.value)) }}
               style={{ flex: 1 }}
             />
-            <button type="button" data-up-btn aria-label="放大" onClick={() => { setZoomPercent(zoomPercent + 10) }} style={{ padding: '2px 10px' }}>＋</button>
+            <button type="button" data-up-btn aria-label={t('crop.zoomIn')} onClick={() => { setZoomPercent(zoomPercent + 10) }} style={{ padding: '2px 10px' }}>＋</button>
             <span data-up-crop-zoom style={{ fontSize: 12, minWidth: 52, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{zoomPercent}%</span>
           </div>
         )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button type="button" data-up-btn onClick={props.onCancel}>取消</button>
-          <button type="button" data-up-btn data-up-btn-primary onClick={confirm} disabled={image === null}>确认裁剪</button>
+          <button type="button" data-up-btn onClick={props.onCancel}>{t('crop.cancel')}</button>
+          <button type="button" data-up-btn data-up-btn-primary onClick={confirm} disabled={image === null}>{t('crop.confirm')}</button>
         </div>
       </div>
     </div>

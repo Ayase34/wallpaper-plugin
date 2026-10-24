@@ -5,6 +5,7 @@
  * 本组件：fixed 覆盖层 + 取消/确认按钮 + Esc 取消（capture 拦截，不连带关工作室）。
  */
 import * as React from 'react'
+import { useI18n } from './use-i18n.ts'
 
 export interface ConfirmDialogProps {
   message: string
@@ -14,6 +15,7 @@ export interface ConfirmDialogProps {
 }
 
 export function ConfirmDialog(props: ConfirmDialogProps): React.ReactElement {
+  const { t } = useI18n()
   const rootRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
     rootRef.current?.focus()
@@ -23,7 +25,7 @@ export function ConfirmDialog(props: ConfirmDialogProps): React.ReactElement {
       ref={rootRef}
       data-up-confirm
       role="dialog"
-      aria-label="确认"
+      aria-label={t('confirm.aria')}
       tabIndex={-1}
       onKeyDownCapture={e => {
         if (e.key === 'Escape') {
@@ -46,9 +48,9 @@ export function ConfirmDialog(props: ConfirmDialogProps): React.ReactElement {
       >
         <span style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{props.message}</span>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button type="button" data-up-btn onClick={props.onCancel}>取消</button>
+          <button type="button" data-up-btn onClick={props.onCancel}>{t('common.cancel')}</button>
           <button type="button" data-up-btn data-up-btn-primary onClick={props.onConfirm}>
-            {props.confirmLabel ?? '确定'}
+            {props.confirmLabel ?? t('common.confirm')}
           </button>
         </div>
       </div>

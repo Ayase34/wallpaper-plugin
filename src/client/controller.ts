@@ -21,6 +21,17 @@ import {
   type CropMarkerInfo,
 } from '../core/crop.ts'
 import { DEMO_PRESETS } from './demo.ts'
+import { t as tr } from './i18n.ts'
+import {
+  ROTATION_TICK_MS,
+  advance,
+  currentUrl,
+  isDue,
+  loadRotationStore,
+  parseRotationKey,
+  rotationKey,
+  saveRotationStore,
+} from './rotation.ts'
 
 /** 主题面（ctx.theme，ui-theme 提供）。 */
 export interface ThemeLike {
@@ -76,6 +87,12 @@ export class PresetsController {
    * controller 渲染裁剪标记时据此把单图样式升级为"静态底 + 原生动图"多背景。 */
   private readonly layersMeta = new Map<string, { animAssetId: string; x: number; y: number; w: number; h: number } | null>()
   private layersMetaFetching = false
+  /** 壁纸轮换（本地偏好）：调度定时器 + 防重入 + 回前台补切。 */
+  private rotationTimer: ReturnType<typeof setInterval> | null = null
+  private rotationBusy = false
+  private readonly onVisibilityChange = (): void => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') void this.tickRotation()
+  }
 
   constructor(ctx: { get?<T>(name: string): T | undefined }) {
     const theme = ctx.get<ThemeLike>('theme')
@@ -161,6 +178,7 @@ export class PresetsController {
 
   /** #96：卸载清理（观察器/通道断开——防旧实例残留驱动已 dispose 的引擎与新实例互踩）。 */
   dispose(): void {
+    this.stopRotation()
     try { this.schemeObserver?.disconnect() } catch { /* 忽略 */ }
     this.schemeObserver = null
     try { this.cropDomObserver?.disconnect() } catch { /* 忽略 */ }
@@ -173,6 +191,90 @@ export class PresetsController {
     this.closeSyncChannel()
   }
 
+
+  // ---- 壁纸轮换（本地偏好；不进预设、不随分享走） ----
+
+  /** 启动轮换调度：30s tick；页面隐藏时不切，回前台立刻补一次。 */
+  startRotation(): void {
+    if (this.rotationTimer !== null) return
+    if (typeof window === 'undefined') return
+    this.rotationTimer = window.setInterval(() => { void this.tickRotation() }, ROTATION_TICK_MS)
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', this.onVisibilityChange)
+    void this.tickRotation()
+  }
+
+  stopRotation(): void {
+    if (this.rotationTimer !== null) {
+      clearInterval(this.rotationTimer)
+      this.rotationTimer = null
+    }
+    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', this.onVisibilityChange)
+  }
+
+  /** 手动换下一张（面板按钮）：配置存在且该预设处于活动态才生效。 */
+  async rotateWidgetNow(widgetId: string): Promise<boolean> {
+    if (this.rotationBusy) return false
+    const activeId = this.engine.getState().activePresetId
+    if (activeId === null) return false
+    const key = rotationKey(activeId, widgetId)
+    if (loadRotationStore()[key] === undefined) return false
+    this.rotationBusy = true
+    try {
+      return await this.applyRotation(activeId, [key], Date.now())
+    } finally {
+      this.rotationBusy = false
+    }
+  }
+
+  /** 到期轮换：多个部件同时到期合并成一次预设应用（一次重挂，不抖）。 */
+  private async tickRotation(): Promise<void> {
+    if (this.rotationBusy) return
+    // 正在编辑草稿 / 页面隐藏 → 不切（回前台由 visibilitychange 补）
+    if (this.engine.getState().hasDraft) return
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+    const activeId = this.engine.getState().activePresetId
+    if (activeId === null) return
+    const store = loadRotationStore()
+    const now = Date.now()
+    const dueKeys = Object.keys(store).filter(key => {
+      const parsed = parseRotationKey(key)
+      if (parsed === null || parsed.presetId !== activeId) return false
+      const cfg = store[key]
+      return cfg !== undefined && isDue(cfg, now)
+    })
+    if (dueKeys.length === 0) return
+    this.rotationBusy = true
+    try {
+      await this.applyRotation(activeId, dueKeys, now)
+    } finally {
+      this.rotationBusy = false
+    }
+  }
+
+  /** 推进指定部件的轮换并重挂活动预设；返回是否有改动。
+   * 注意：只改内存中的预设（source=url + 当前链接），**不落盘**——预设文件始终是用户保存的样子。 */
+  private async applyRotation(presetId: string, dueKeys: string[], now: number): Promise<boolean> {
+    const preset = await this.loadPreset(presetId)
+    if (preset === null) return false
+    const store = loadRotationStore()
+    let changed = false
+    const widgets = (preset.widgets ?? []).map(widget => {
+      const key = rotationKey(presetId, widget.id)
+      if (!dueKeys.includes(key)) return widget
+      const cfg = store[key]
+      if (cfg === undefined) return widget
+      const next = advance(cfg, now)
+      const url = currentUrl(next)
+      store[key] = next
+      if (url === null) return widget
+      changed = true
+      return { ...widget, params: { ...widget.params, source: 'url', imageUrl: url } }
+    })
+    if (!changed) return false
+    if (!this.engine.applyPreset({ ...preset, widgets })) return false
+    saveRotationStore(store)
+    return true
+  }
 
   /** 读取持久化的活动预设（Node half 文件；含 revision——AI bridge 变更检测）。 */
   private async fetchPersistedState(): Promise<{ activePresetId: string | null; revision: number }> {
@@ -265,7 +367,7 @@ export class PresetsController {
       body: JSON.stringify({ activePresetId: id }),
     }).catch(() => {
       // 评审 P2-4：持久化失败不得静默——提示"已应用但未持久化（重启后可能恢复旧预设）"。
-      this.engine.reportError('活动预设已应用，但持久化失败（重启后可能恢复为之前的预设）')
+      this.engine.reportError(tr('ctrl.activePersistFailed'))
     })
   }
 
@@ -284,7 +386,7 @@ export class PresetsController {
         const result = validatePreset(body.preset)
         if (result.ok) return result.preset
         // review P2-1：文件存在但非法 → 明确"损坏"（非"不存在"）
-        this.engine.reportError(`预设「${id}」已损坏：${result.errors[0] ?? '校验失败'}`)
+        this.engine.reportError(tr('ctrl.broken', { id, error: result.errors[0] ?? tr('ctrl.validationFailed') }))
         return null
       }
     } catch { /* 落到 demo 兜底 */ }
@@ -393,10 +495,11 @@ export class PresetsController {
    * 备份判定不依赖额外标记）→ 成功 → 引擎层同步最终 id（草稿 id 与落盘 id 不一致时
    * 先重挂草稿）→ 提升 → 写 active.json。
    * @param preset - 完整预设（已含编辑值）。
-   * @param options - activate：保存后提升为活动预设（默认 true）。
+   * @param options - activate：保存后提升为活动预设（默认 true）；preserveDraft：不碰当前
+   *   草稿（分享导入等「与编辑会话无关的写入」必须置 true——否则草稿会被改挂到新预设上）。
    * @returns 成功与否（失败信息在 lastError）。
    */
-  async savePreset(preset: Preset, options: { activate?: boolean } = {}): Promise<boolean> {
+  async savePreset(preset: Preset, options: { activate?: boolean; preserveDraft?: boolean } = {}): Promise<boolean> {
     // #104：UI 草稿删除素材后 cover 可能悬空（草稿删除只动 assets/widgets 不动 cover）——
     // 保存前自动回退封面（自动生成 SVG），而不是整体拒绝保存（拒绝会让用户卡死在"损坏"）
     const normalized = normalizeDanglingCover(preset)
@@ -428,17 +531,20 @@ export class PresetsController {
     // 此处的快照重挂会把它顶回保存时刻（#96 审计 C12 已知微竞态：localhost 保存窗口毫秒级，
     // 且"保留草稿令牌"的替代实现会破坏 P1-1 的空草稿 id 重挂契约——不做）
     const state = this.engine.getState()
-    if (state.hasDraft && state.draftPresetId !== target.id) {
+    const preserveDraft = options.preserveDraft === true
+    if (!preserveDraft && state.hasDraft && state.draftPresetId !== target.id) {
       const synced = this.engine.patchDraft(result.preset)
       if (!synced) {
-        this.engine.reportError('保存已落盘，但活动预设未同步（可重启后恢复）')
+        this.engine.reportError(tr('ctrl.notSynced'))
         return false
       }
     }
     // 3) 引擎提升 + 持久化活动 id
+    // preserveDraft（分享导入等旁路写入）：不得 saveDraftAsActive——那会把**当前草稿**
+    // 提升成活动预设（用户以为导入的是分享，界面却换成自己的草稿）。需要激活时直接 apply。
     let promotionError: string | null = null
     if (activate) {
-      const ok = this.engine.saveDraftAsActive()
+      const ok = preserveDraft ? false : this.engine.saveDraftAsActive()
       if (!ok) {
         // 无草稿（直接保存库副本）→ 用 applyPreset 提升；失败记录（评审 P2-3：不得吞错）
         const applied = this.engine.applyPreset(result.preset)
@@ -447,7 +553,7 @@ export class PresetsController {
       if (promotionError === null) {
         this.persistActiveId(target.id)
       }
-    } else if (this.engine.getState().draftPresetId === target.id) {
+    } else if (!preserveDraft && this.engine.getState().draftPresetId === target.id) {
       this.engine.saveDraftAsActive()
     }
     if (promotionError === null) {
@@ -500,7 +606,7 @@ export class PresetsController {
         body: JSON.stringify({ preset }),
       })
       if (!res.ok) {
-        this.engine.reportError(`导出 ZIP 失败（HTTP ${res.status}）`)
+        this.engine.reportError(tr('ctrl.exportHttp', { status: res.status }))
         return false
       }
       const blob = await res.blob()
@@ -513,7 +619,7 @@ export class PresetsController {
       this.engine.reportError(null)
       return true
     } catch {
-      this.engine.reportError('导出 ZIP 失败（网络错误）')
+      this.engine.reportError(tr('ctrl.exportNet'))
       return false
     }
   }
@@ -562,7 +668,7 @@ export class PresetsController {
     if (preset === null) {
       // review P2-1：应用失败必须反馈（预设不存在或已损坏——loadPreset 对损坏已 reportError）
       if (this.engine.getState().lastError === null) {
-        this.engine.reportError(`预设「${id}」不存在或无法加载`)
+        this.engine.reportError(tr('ctrl.missing', { id }))
       }
       return false
     }
@@ -610,7 +716,7 @@ export class PresetsController {
       this.engine.reportError(message)
       return { ok: false, error: message }
     } catch {
-      this.engine.reportError('素材上传失败（网络错误）')
+      this.engine.reportError(tr('ctrl.uploadNet'))
       return { ok: false, error: '上传失败（网络错误）' }
     }
   }
@@ -671,7 +777,7 @@ export class PresetsController {
       return { ok: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      this.engine.reportError(`切换主题失败：${message}`)
+      this.engine.reportError(tr('ctrl.themeSwitch', { error: message }))
       return { ok: false, error: message }
     }
   }

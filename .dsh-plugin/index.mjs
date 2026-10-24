@@ -969,33 +969,62 @@ function cropFromFocus(imgW, imgH, frameW, frameH, focusX, focusY, zoom = 1, mod
 var MAX_ASSETS = 100;
 var MAX_ASSET_FILE_SIZE = 20 * 1024 * 1024;
 var MAX_ASSET_DATAURL_LENGTH = 28e6;
+var MAX_IMAGE_URL_LENGTH = 2048;
+var GRADIENT_PRESETS = [
+  { id: "aurora", name: "\u6781\u5149", css: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" },
+  { id: "ocean", name: "\u6DF1\u6D77", css: "linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)" },
+  { id: "dusk", name: "\u66AE\u8272", css: "linear-gradient(135deg, #232526 0%, #414345 100%)" },
+  { id: "sunset", name: "\u843D\u65E5", css: "linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%)" },
+  { id: "forest", name: "\u68EE\u6797", css: "linear-gradient(135deg, #134e5e 0%, #71b280 100%)" },
+  { id: "rose", name: "\u73AB\u7470", css: "linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%)" },
+  { id: "ember", name: "\u4F59\u70EC", css: "linear-gradient(135deg, #f83600 0%, #f9d423 100%)" },
+  { id: "paper", name: "\u7EB8\u767D", css: "linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%)" }
+];
+function gradientOptions() {
+  return [{ label: "\uFF08\u4E0D\u4F7F\u7528\uFF09", value: "" }, ...GRADIENT_PRESETS.map((item) => ({ label: item.name, value: item.id }))];
+}
+function isSafeImageUrl(value) {
+  if (value === "" || value.length > MAX_IMAGE_URL_LENGTH) return false;
+  if (!/^https?:\/\//i.test(value)) return false;
+  return /^[\x21-\x7e]+$/.test(value) && !/["'()<>\\`\s]/.test(value);
+}
+function imageParams() {
+  return [
+    {
+      key: "source",
+      label: "\u56FE\u7247",
+      type: "select",
+      default: "asset",
+      options: [
+        { label: "\u672C\u5730\u7D20\u6750", value: "asset" },
+        { label: "\u56FE\u7247\u94FE\u63A5", value: "url" },
+        { label: "\u5185\u7F6E\u6E10\u53D8", value: "gradient" }
+      ]
+    },
+    { key: "assetId", label: "\u7D20\u6750", type: "asset", default: "", visibleWhen: { key: "source", equals: "asset" } },
+    { key: "imageUrl", label: "\u94FE\u63A5", type: "url", default: "", visibleWhen: { key: "source", equals: "url" } },
+    { key: "gradient", label: "\u6E10\u53D8", type: "select", default: "", options: gradientOptions(), visibleWhen: { key: "source", equals: "gradient" } },
+    { key: "opacity", label: "\u4E0D\u900F\u660E\u5EA6", type: "range", default: "1", min: 0, max: 1, step: 0.01 }
+  ];
+}
 var WIDGETS = [
   {
     id: "chat-background",
     name: "\u804A\u5929\u80CC\u666F\u56FE",
     description: "\u4F1A\u8BDD\u533A\u80CC\u666F\u58C1\u7EB8",
-    params: [
-      { key: "assetId", label: "\u7D20\u6750", type: "asset" },
-      { key: "opacity", label: "\u4E0D\u900F\u660E\u5EA6", type: "range", default: "1", min: 0, max: 1, step: 0.01 }
-    ]
+    params: imageParams()
   },
   {
     id: "settings-background",
     name: "\u8BBE\u7F6E\u5361\u80CC\u666F\u56FE",
     description: "\u8BBE\u7F6E\u7A97\u53E3\u80CC\u666F\u58C1\u7EB8",
-    params: [
-      { key: "assetId", label: "\u7D20\u6750", type: "asset" },
-      { key: "opacity", label: "\u4E0D\u900F\u660E\u5EA6", type: "range", default: "1", min: 0, max: 1, step: 0.01 }
-    ]
+    params: imageParams()
   },
   {
     id: "sidebar-poster",
     name: "\u4FA7\u680F\u6D77\u62A5",
     description: "\u5DE6\u4FA7\u5BFC\u822A\u680F\u6D77\u62A5\u80CC\u666F",
-    params: [
-      { key: "assetId", label: "\u7D20\u6750", type: "asset" },
-      { key: "opacity", label: "\u4E0D\u900F\u660E\u5EA6", type: "range", default: "1", min: 0, max: 1, step: 0.01 }
-    ]
+    params: imageParams()
   }
 ];
 function findWidget(id) {
@@ -1221,6 +1250,10 @@ function validatePreset(raw) {
                 errors.push(`widgets[${i}] \u53C2\u6570 ${param.key} \u4E0D\u80FD\u5927\u4E8E ${param.max}`);
               }
             }
+          } else if (param.type === "url") {
+            if (value !== "" && !isSafeImageUrl(value)) {
+              errors.push(`widgets[${i}] \u53C2\u6570 ${param.key} \u5FC5\u987B\u662F http/https \u56FE\u7247\u94FE\u63A5\uFF08\u2264${MAX_IMAGE_URL_LENGTH} \u5B57\u7B26\uFF0C\u7981\u5F15\u53F7/\u62EC\u53F7/\u7A7A\u767D\uFF09`);
+            }
           } else if (param.type === "select" && param.options !== void 0 && !param.options.some((o) => o.value === value)) {
             errors.push(`widgets[${i}] \u53C2\u6570 ${param.key} \u4E0D\u5728\u9009\u9879\u5185`);
           }
@@ -1231,6 +1264,22 @@ function validatePreset(raw) {
           if (typeof value !== "string" || !/^[+-]?(\d+(\.\d+)?|\.\d+)$/.test(value.trim())) {
             errors.push(`widgets[${i}] \u53C2\u6570 ${key} \u5FC5\u987B\u662F\u5341\u8FDB\u5236\u6570\u5B57\u5B57\u7B26\u4E32`);
           }
+        }
+        const darkAssetId = widget.params.assetIdDark;
+        if (darkAssetId !== void 0) {
+          if (typeof darkAssetId !== "string") {
+            errors.push(`widgets[${i}] \u53C2\u6570 assetIdDark \u5FC5\u987B\u662F\u5B57\u7B26\u4E32`);
+          } else if (darkAssetId !== "" && !assetIds.has(darkAssetId)) {
+            errors.push(`widgets[${i}] \u53C2\u6570 assetIdDark \u5F15\u7528\u4E86\u4E0D\u5B58\u5728\u7684\u7D20\u6750 ${darkAssetId}`);
+          }
+        }
+        const darkUrl = widget.params.imageUrlDark;
+        if (darkUrl !== void 0 && (typeof darkUrl !== "string" || darkUrl !== "" && !isSafeImageUrl(darkUrl))) {
+          errors.push(`widgets[${i}] \u53C2\u6570 imageUrlDark \u5FC5\u987B\u662F http/https \u56FE\u7247\u94FE\u63A5`);
+        }
+        const darkGradient = widget.params.gradientDark;
+        if (darkGradient !== void 0 && (typeof darkGradient !== "string" || !gradientOptions().some((o) => o.value === darkGradient))) {
+          errors.push(`widgets[${i}] \u53C2\u6570 gradientDark \u4E0D\u5728\u6E10\u53D8\u6863\u4F4D\u5185`);
         }
       }
     }
@@ -2289,10 +2338,11 @@ var KNOBS = [
     id: "settings-card",
     category: "spatial",
     name: "\u8BBE\u7F6E\u5361\u9762",
-    description: "\u8BBE\u7F6E\u9762\u677F\u5361\u7247\u5E95\u8272\u4E0E\u63CF\u8FB9",
+    description: "\u8BBE\u7F6E\u9762\u677F\u5361\u7247\u5E95\u8272\uFF08\u63CF\u8FB9\u7559\u9AD8\u7EA7\u4EE4\u724C\uFF09",
     control: "color",
-    bundle: ["--dsw-alias-settings-card-fill", "--dsw-alias-settings-card-stroke"],
-    derives: { "--dsw-alias-settings-card-stroke": { mode: "alpha", amount: 0.14 } }
+    // #113：描边不再进束——「边框」用 alpha(fill) 派生出来是半透明填充色而不是边框线，
+    // 必然与手调描边冲突（旋钮行永远挂「束内已单独调整」）。描边交给高级令牌区。
+    bundle: ["--dsw-alias-settings-card-fill"]
   },
   {
     id: "markdown-surfaces",
@@ -2393,26 +2443,51 @@ function knobValuesForSchemes(knobId, value) {
 
 // src/core/demo-data.ts
 var DEMO_DEFAULT_TOKENS = {
+  // 背景与结构面
   "--dsw-alias-bg-base": { light: "rgb(240, 248, 255)", dark: "rgb(6, 14, 30)" },
   "--dsw-alias-bg-layer-1": { light: "rgb(255, 255, 255)", dark: "rgb(12, 22, 42)" },
   "--dsw-alias-bg-layer-2": { light: "rgb(226, 241, 255)", dark: "rgb(18, 32, 58)" },
   "--dsw-specific-sidebar-fill": { light: "rgb(230, 243, 255)", dark: "rgb(4, 10, 24)" },
+  "--dsw-specific-sidebar-nav-item-active": { light: "rgb(214, 232, 255)", dark: "rgb(18, 36, 70)" },
+  "--dsw-specific-sidebar-nav-item-active-accent": { light: "rgb(250, 252, 255)", dark: "rgb(18, 34, 64)" },
   "--dsw-specific-bubble": { light: "rgb(214, 235, 255)", dark: "rgb(14, 30, 56)" },
   "--dsw-specific-bubble-highlight": { light: "rgb(178, 216, 255)", dark: "rgb(24, 48, 88)" },
   "--dsw-specific-input-major": { light: "rgb(255, 255, 255)", dark: "rgb(10, 20, 40)" },
-  "--dsw-alias-brand-primary": { light: "rgb(0, 105, 255)", dark: "rgb(96, 160, 255)" },
-  "--dsw-alias-button-info-fill": { light: "rgb(0, 105, 255)", dark: "rgb(84, 150, 255)" },
-  "--dsw-alias-state-business-primary": { light: "rgb(0, 105, 255)", dark: "rgb(84, 150, 255)" },
-  "--dsw-specific-sidebar-nav-item-active": { light: "rgb(214, 232, 255)", dark: "rgb(18, 36, 70)" },
-  // #107：nav-item-active-accent 同时是「推荐徽标」底色（宿主 .badge 用它当 background、
-  // 用 button-info-fill 当文字色）——两者同色时徽标文字隐形（实测 1.0:1）。
-  // 这里刻意让「当底」的一侧足够极端（浅色几乎白 / 深色接近夜蓝）以保证文字可读；
-  // 单一取值无法同时满足明暗两侧 ≥4.5（浅色要 >235 级、深色要 <22 级）。
-  // 改动前为 rgb(0,105,255) / rgb(96,160,255)（与文字同色 → 徽标隐形）。
-  "--dsw-specific-sidebar-nav-item-active-accent": { light: "rgb(250, 252, 255)", dark: "rgb(18, 34, 64)" },
+  // 菜单 / 悬浮层（旋钮「菜单与悬浮层」整束派生）
+  "--dsw-specific-menu": { light: "rgb(236, 245, 255)", dark: "rgb(22, 38, 66)" },
+  "--dsw-specific-tip": { light: "#e3ebf5", dark: "#1f2f4a" },
+  "--dsw-specific-selector": { light: "#d9e1eb", dark: "#293751" },
+  "--dsw-alias-bg-overlay": { light: "rgba(236, 245, 255, 0.6)", dark: "rgba(22, 38, 66, 0.6)" },
+  // 边框（冷调半透明，保留宿主「半透明描边」用法）
+  "--dsw-alias-border-l2": { light: "rgba(0, 72, 160, 0.12)", dark: "rgba(150, 196, 255, 0.16)" },
+  // 设置卡（宿主默认从 layer-2/border 派生；显式写一份让旋钮回读与实际一致）
+  "--dsw-alias-settings-card-fill": { light: "rgb(226, 241, 255)", dark: "rgb(18, 32, 58)" },
+  "--dsw-alias-settings-card-stroke": { light: "rgba(0, 72, 160, 0.14)", dark: "rgba(150, 196, 255, 0.18)" },
+  // 品牌与按钮（悬停由旋钮派生，回读一致）
+  "--dsw-alias-brand-primary": { light: "rgb(0, 96, 236)", dark: "rgb(96, 160, 255)" },
+  "--dsw-alias-button-primary-fill": { light: "rgb(0, 96, 236)", dark: "rgb(96, 160, 255)" },
+  "--dsw-alias-button-info-fill": { light: "rgb(0, 96, 236)", dark: "rgb(96, 160, 255)" },
+  "--dsw-alias-state-business-primary": { light: "rgb(0, 96, 236)", dark: "rgb(96, 160, 255)" },
+  "--dsw-alias-button-primary-hover": { light: "#004fc2", dark: "#7db1ff" },
+  "--dsw-alias-button-info-hover": { light: "#004fc2", dark: "#7db1ff" },
+  // 状态与交互
+  "--dsw-alias-state-error-primary": { light: "rgb(191, 45, 52)", dark: "rgb(255, 138, 128)" },
+  "--dsw-alias-state-warn-primary": { light: "rgb(144, 94, 0)", dark: "rgb(255, 191, 92)" },
+  "--dsw-alias-state-success-primary": { light: "rgb(20, 118, 84)", dark: "rgb(96, 214, 164)" },
+  "--dsw-alias-interactive-bg-hover": { light: "rgba(0, 72, 160, 0.06)", dark: "rgba(150, 196, 255, 0.08)" },
+  // 文字三级
   "--dsw-alias-label-primary": { light: "rgb(10, 32, 62)", dark: "rgb(232, 242, 255)" },
   "--dsw-alias-label-secondary": { light: "rgb(66, 98, 140)", dark: "rgb(164, 186, 216)" },
-  "--dsw-alias-label-tertiary": { light: "rgb(86, 112, 150)", dark: "rgb(128, 152, 186)" }
+  "--dsw-alias-label-tertiary": { light: "rgb(80, 106, 144)", dark: "rgb(128, 152, 186)" },
+  // 代码 / 引用面（旋钮整束派生）
+  "--dsw-alias-markdown-code-block": { light: "rgb(230, 241, 254)", dark: "rgb(14, 26, 46)" },
+  "--dsw-alias-markdown-code-block-banner": { light: "#dde7f4", dark: "#182336" },
+  "--dsw-alias-markdown-inline-code": { light: "#d4deea", dark: "#212c3f" },
+  "--dsw-alias-markdown-citation": { light: "#dfeaf6", dark: "#152134" },
+  "--dsw-alias-markdown-tag": { light: "#d8e3ef", dark: "#1c283b" },
+  // 浮层（toast / tooltip，旋钮整束派生）
+  "--dsw-alias-toast-bg": { light: "rgb(26, 41, 64)", dark: "rgb(34, 51, 78)" },
+  "--dsw-alias-tooltip-bg": { light: "#19273d", dark: "#2b3b55" }
 };
 function preset(id, name2, tokens, style) {
   return {
@@ -4238,14 +4313,42 @@ var WIDGETS2 = [
   },
   {
     id: "settings-background",
-    params: { assetId: "asset-dsnm-settings", opacity: "0.35", cropX: "-48", cropY: "-48", cropW: "2016", cropH: "2016" }
+    // #113：原图是不透明白底，暗色下 0.35 不透明度会被 wash 混成"奶灰"——
+    // 同一个素材给一份「暗色规则」把不透明度压到 0.18（白底在暗背景上退到近黑）。
+    params: {
+      assetId: "asset-dsnm-settings",
+      opacity: "0.35",
+      cropX: "-48",
+      cropY: "-48",
+      cropW: "2016",
+      cropH: "2016",
+      assetIdDark: "asset-dsnm-settings",
+      opacityDark: "0.18",
+      cropXDark: "-48",
+      cropYDark: "-48",
+      cropWDark: "2016",
+      cropHDark: "2016"
+    }
   },
   {
     id: "sidebar-poster",
-    params: { assetId: "asset-dsnm-sidebar", opacity: "0.35", cropX: "-211.2", cropY: "-48.3", cropW: "806.4", cropH: "2016.5" }
+    params: {
+      assetId: "asset-dsnm-sidebar",
+      opacity: "0.35",
+      cropX: "-211.2",
+      cropY: "-48.3",
+      cropW: "806.4",
+      cropH: "2016.5",
+      assetIdDark: "asset-dsnm-sidebar",
+      opacityDark: "0.18",
+      cropXDark: "-211.2",
+      cropYDark: "-48.3",
+      cropWDark: "806.4",
+      cropHDark: "2016.5"
+    }
   }
 ];
-var COVER = { assetId: "asset-dsnm-chat", cropX: "0", cropY: "-116.5", cropW: "2501.8", cropH: "1408" };
+var COVER = { assetId: "asset-dsnm-chat", cropX: "0", cropY: "-220.3", cropW: "1920", cropH: "1080.6" };
 function buildBuiltinPreset(assets) {
   return {
     schemaVersion: 1,

@@ -84,15 +84,29 @@ const WIDGETS: Array<{ id: string; params: Record<string, string> }> = [
   },
   {
     id: 'settings-background',
-    params: { assetId: 'asset-dsnm-settings', opacity: '0.35', cropX: '-48', cropY: '-48', cropW: '2016', cropH: '2016' },
+    // #113：原图是不透明白底，暗色下 0.35 不透明度会被 wash 混成"奶灰"——
+    // 同一个素材给一份「暗色规则」把不透明度压到 0.18（白底在暗背景上退到近黑）。
+    params: {
+      assetId: 'asset-dsnm-settings', opacity: '0.35', cropX: '-48', cropY: '-48', cropW: '2016', cropH: '2016',
+      assetIdDark: 'asset-dsnm-settings', opacityDark: '0.18',
+      cropXDark: '-48', cropYDark: '-48', cropWDark: '2016', cropHDark: '2016',
+    },
   },
   {
     id: 'sidebar-poster',
-    params: { assetId: 'asset-dsnm-sidebar', opacity: '0.35', cropX: '-211.2', cropY: '-48.3', cropW: '806.4', cropH: '2016.5' },
+    params: {
+      assetId: 'asset-dsnm-sidebar', opacity: '0.35', cropX: '-211.2', cropY: '-48.3', cropW: '806.4', cropH: '2016.5',
+      assetIdDark: 'asset-dsnm-sidebar', opacityDark: '0.18',
+      cropXDark: '-211.2', cropYDark: '-48.3', cropWDark: '806.4', cropHDark: '2016.5',
+    },
   },
 ]
 
-const COVER = { assetId: 'asset-dsnm-chat', cropX: '0', cropY: '-116.5', cropW: '2501.8', cropH: '1408' }
+// #113：封面帧是 3:1（1920×640），裁的是「图片在帧里的摆放矩形」。
+// 旧值（2501.8×1408）是从 16:9 聊天背景挪过来的，超出帧且比例不对 → 封面被压扁。
+// 这里按 1672×941 源图算「满幅 3:1」：fit=0.6801 → 等比放大 1.688 倍填满宽度，
+// 垂直溢出 220.3 由帧居中裁掉（x=0 / w=1920 铺满，y/h 居中）。
+const COVER = { assetId: 'asset-dsnm-chat', cropX: '0', cropY: '-220.3', cropW: '1920', cropH: '1080.6' }
 
 /** 组装出厂预设（令牌来自 DEMO_DEFAULT_TOKENS；素材走库引用而非内嵌 dataUrl）。 */
 export function buildBuiltinPreset(assets: SeedAsset[]): Preset {

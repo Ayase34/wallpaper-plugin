@@ -14,6 +14,7 @@ import { ConfirmDialog } from './confirm-dialog.tsx'
 import { hasCapability } from './capabilities.ts'
 import { DEMO_PRESETS } from './demo.ts'
 import { computeChromePins, detectAppScheme } from './theme-pins.ts'
+import { useI18n } from './use-i18n.ts'
 
 interface PresetMetaItem {
   id: string
@@ -60,6 +61,7 @@ let stashedSession: EditorSession | null = null
 
 /** 全屏工作室主体。 */
 export function StudioShell(): React.ReactElement | null {
+  const { t } = useI18n()
   const [open, setOpen] = React.useState(isStudioHashActive())
   const isPrimary = React.useRef(false)
   const controller = getController()
@@ -191,7 +193,7 @@ export function StudioShell(): React.ReactElement | null {
    * 关闭后输入框全部无法输入）。无草稿时直接执行。 */
   const requestDiscard = (action: () => void): void => {
     if (!hasUnsavedDraft()) { action(); return }
-    setConfirmBox({ message: '当前有未保存的改动，放弃并继续？', label: '放弃并继续', action })
+    setConfirmBox({ message: t('studio.unsavedConfirm'), label: t('studio.continueDiscard'), action })
   }
   const requestConfirm = (message: string, label: string, action: () => void): void => {
     setConfirmBox({ message, label, action })
@@ -205,7 +207,7 @@ export function StudioShell(): React.ReactElement | null {
     setBusy(true)
     try {
       const preset = await controller?.loadPreset(id)
-      if (preset === null) { setNotice(`预设 ${id} 不存在`); return }
+      if (preset === null) { setNotice(t('studio.presetMissing', { id })); return }
       const next: EditorSession = {
         presetId: preset.id,
         presetName: preset.name,
@@ -229,10 +231,10 @@ export function StudioShell(): React.ReactElement | null {
     requestDiscard(() => {
       // 评审 P1-1：新建即分配固定 id（不再每次 buildPreset 生成新 id——避免草稿 id 抖动）。
       const id = `preset-${Date.now().toString(36)}`
-      const next: EditorSession = { presetId: id, presetName: '新预设', tokens: {}, css: [], theme: { enabled: false, colorScheme: 'dark' }, assets: [], widgets: [], cover: undefined, groups: [] }
+      const next: EditorSession = { presetId: id, presetName: t('studio.newPresetName'), tokens: {}, css: [], theme: { enabled: false, colorScheme: 'dark' }, assets: [], widgets: [], cover: undefined, groups: [] }
       setSession(next)
       stashedSession = null
-      const empty: Preset = { schemaVersion: 1, id, name: '新预设', edition: 'standard', tokens: {} }
+      const empty: Preset = { schemaVersion: 1, id, name: t('studio.newPresetName'), edition: 'standard', tokens: {} }
       controller?.engine.startDraft(empty)
       setNotice(null)
     })
@@ -246,15 +248,15 @@ export function StudioShell(): React.ReactElement | null {
       if (Object.keys(tokens).length === 0) {
         // 无活动预设 = 默认外观（零覆盖层）——捕获为空令牌草稿：
         // 应用即原版外观，编辑时改什么就叠加什么（M1 修复：不再误报"无活动预设"）。
-        const next: EditorSession = { presetId: id, presetName: '从默认外观新建', tokens: {}, css: [], theme: { enabled: false, colorScheme: 'dark' }, assets: [], widgets: [], cover: undefined, groups: [] }
+        const next: EditorSession = { presetId: id, presetName: t('studio.fromDefaultName'), tokens: {}, css: [], theme: { enabled: false, colorScheme: 'dark' }, assets: [], widgets: [], cover: undefined, groups: [] }
         setSession(next)
         stashedSession = null
-        const empty: Preset = { schemaVersion: 1, id, name: '从默认外观新建', edition: 'standard', tokens: {} }
+        const empty: Preset = { schemaVersion: 1, id, name: t('studio.fromDefaultName'), edition: 'standard', tokens: {} }
         controller?.engine.startDraft(empty)
-        setNotice('已从默认外观创建（当前无活动预设，将使用系统默认样式）')
+        setNotice(t('studio.createdFromDefault'))
         return
       }
-      const next: EditorSession = { presetId: id, presetName: '从当前外观新建', tokens: { ...tokens }, css: [], theme: { enabled: false, colorScheme: 'dark' }, assets: [], widgets: [], cover: undefined, groups: [] }
+      const next: EditorSession = { presetId: id, presetName: t('studio.fromCurrentName'), tokens: { ...tokens }, css: [], theme: { enabled: false, colorScheme: 'dark' }, assets: [], widgets: [], cover: undefined, groups: [] }
       setSession(next)
       stashedSession = null
       controller?.engine.startDraft(buildPreset(next))
@@ -276,7 +278,7 @@ export function StudioShell(): React.ReactElement | null {
   }
 
   const save = async (): Promise<void> => {
-    if (session === null) { setNotice('没有正在编辑的预设'); return }
+    if (session === null) { setNotice(t('studio.noSession')); return }
     setBusy(true)
     try {
       // 评审 UX：内置预设强制另存（不允许覆盖出厂预设）——生成新 id 并提示。
@@ -303,10 +305,10 @@ export function StudioShell(): React.ReactElement | null {
         })
         stashedSession = null
         const name = preset.name
-        setNotice(isBuiltin ? `内置预设已另存为「${name}」` : `已保存「${name}」`)
+        setNotice(isBuiltin ? t('studio.savedBuiltinAs', { name }) : t('studio.savedAs', { name }))
         await refreshPresets()
       } else {
-        setNotice(controller?.engine.getState().lastError ?? '保存失败')
+        setNotice(controller?.engine.getState().lastError ?? t('studio.saveFail'))
       }
     } finally { setBusy(false) }
   }
@@ -316,7 +318,7 @@ export function StudioShell(): React.ReactElement | null {
       controller?.engine.discardDraft()
       setSession(null)
       stashedSession = null
-      setNotice('已放弃未保存的改动')
+      setNotice(t('studio.discarded'))
     })
   }
 
@@ -324,7 +326,7 @@ export function StudioShell(): React.ReactElement | null {
     setBusy(true)
     try {
       const preset = await controller?.loadPreset(id)
-      if (preset === null) { setNotice(`预设 ${id} 不存在`); return }
+      if (preset === null) { setNotice(t('studio.presetMissing', { id })); return }
       // 评审 P2-6：副本 id 冲突时加时间戳后缀（不覆盖已有副本）。
       let copyId = `${id}-copy`
       const existing = await controller?.listPresets() ?? []
@@ -332,10 +334,10 @@ export function StudioShell(): React.ReactElement | null {
       const copy: Preset = { ...preset, id: copyId, name: `${preset.name}（副本）` }
       const ok = await controller?.savePreset(copy, { activate: false }) ?? false
       if (ok) {
-        setNotice(`已复制为「${copy.name}」`)
+        setNotice(t('studio.copyOk', { name: copy.name }))
         await refreshPresets()
       } else {
-        setNotice('复制失败')
+        setNotice(t('studio.copyFail'))
       }
     } finally { setBusy(false) }
   }
@@ -346,27 +348,27 @@ export function StudioShell(): React.ReactElement | null {
     const doRemove = async (): Promise<void> => {
       const ok = await controller?.deletePreset(id) ?? false
       if (ok) {
-        setNotice(`已删除 ${id}`)
+        setNotice(t('studio.deleted', { id }))
         if (session?.presetId === id) {
           setSession(null)
           stashedSession = null
           controller?.engine.discardDraft()
           // review P2-2：删除活动预设后外观被还原——说明原因。
-          setNotice(`已删除 ${id}（外观已还原默认）`)
+          setNotice(t('studio.deletedReverted', { id }))
         }
         await refreshPresets()
       } else {
-        setNotice('删除失败')
+        setNotice(t('studio.deleteFail'))
       }
     }
     if (session?.presetId === id && hasUnsavedDraft()) {
       setConfirmBox({
-        message: '当前有未保存的改动，放弃并继续？',
-        label: '放弃并继续',
-        action: () => { requestConfirm(`删除预设「${id}」？此操作不可恢复。`, '删除', () => { void doRemove() }) },
+        message: t('studio.unsavedConfirm'),
+        label: t('studio.continueDiscard'),
+        action: () => { requestConfirm(t('studio.deleteConfirm', { id }), t('studio.deleteAction'), () => { void doRemove() }) },
       })
     } else {
-      requestConfirm(`删除预设「${id}」？此操作不可恢复。`, '删除', () => { void doRemove() })
+      requestConfirm(t('studio.deleteConfirm', { id }), t('studio.deleteAction'), () => { void doRemove() })
     }
   }
 
@@ -379,24 +381,24 @@ export function StudioShell(): React.ReactElement | null {
       try {
         const result = await controller?.restoreBackup(id)
         if (result?.ok === true) {
-          setNotice(`已还原备份「${name}」（还原前版本已存入备份，未自动应用）`)
+          setNotice(t('studio.backupOk', { name }))
           await refreshPresets()
         } else {
-          setNotice(result?.error ?? '还原备份失败')
+          setNotice(result?.error ?? t('studio.backupFail'))
         }
       } finally { setBusy(false) }
     }
     const confirmRestore = (): void => {
       requestConfirm(
-        `用备份还原预设「${name}」？当前版本将存入备份（备份仅保留一层，可再还原回去），还原不自动应用。`,
-        '还原备份',
+        t('studio.backupConfirm', { name }),
+        t('studio.backupAction'),
         () => { void doRestore() },
       )
     }
     if (session?.presetId === id && hasUnsavedDraft()) {
       setConfirmBox({
-        message: '当前有未保存的改动，放弃并继续？',
-        label: '放弃并继续',
+        message: t('studio.unsavedConfirm'),
+        label: t('studio.continueDiscard'),
         action: confirmRestore,
       })
     } else {
@@ -408,10 +410,10 @@ export function StudioShell(): React.ReactElement | null {
     if (file === undefined) return
     const result = await controller?.importPresetFile(file)
     if (result?.ok === true) {
-      setNotice(`已导入 ${result.id}`)
+      setNotice(t('studio.imported', { id: result.id }))
       await refreshPresets()
     } else {
-      setNotice(result?.error ?? '导入失败')
+      setNotice(result?.error ?? t('studio.importFail'))
     }
   }
 
@@ -420,17 +422,17 @@ export function StudioShell(): React.ReactElement | null {
   const exportZipCurrent = async (): Promise<void> => {
     if (session !== null) {
       const ok = await controller?.exportZipFile(buildPreset(session)) ?? false
-      if (ok) setNotice('已导出 ZIP 三件套（含封面）')
+      if (ok) setNotice(t('studio.exported'))
     } else if (state?.activePresetId !== null && state?.activePresetId !== undefined) {
       const preset = await controller?.loadPreset(state.activePresetId)
       if (preset !== null) {
         const ok = await controller?.exportZipFile(preset) ?? false
-        if (ok) setNotice('已导出 ZIP 三件套（含封面）')
+        if (ok) setNotice(t('studio.exported'))
       } else {
-        setNotice('活动预设不存在，无法导出')
+        setNotice(t('studio.exportMissing'))
       }
     } else {
-      setNotice('没有可导出的预设')
+      setNotice(t('studio.exportEmpty'))
     }
   }
 
@@ -441,12 +443,12 @@ export function StudioShell(): React.ReactElement | null {
     const doApply = async (): Promise<void> => {
       // 评审 P2-2：应用失败必须给反馈（损坏文件/版本契约拒绝等）。
       const ok = await controller?.applyPresetById(id) ?? false
-      setNotice(ok ? null : `应用「${id}」失败：${controller?.engine.getState().lastError ?? '预设不存在或已损坏'}`)
+      setNotice(ok ? null : t('studio.applyFail', { id, error: controller?.engine.getState().lastError ?? t('studio.broken') }))
     }
     if (session !== null && controller?.engine.getState().hasDraft === true) {
       setConfirmBox({
-        message: '当前有未保存的编辑草稿（会遮蔽外观预览）。放弃草稿并应用所选预设？',
-        label: '放弃并应用',
+        message: t('studio.draftBlocksApply'),
+        label: t('studio.discardAndApply'),
         action: () => {
           controller?.engine.discardDraft()
           setSession(null)
@@ -490,21 +492,21 @@ export function StudioShell(): React.ReactElement | null {
       style={Object.keys(chromePins).length > 0 ? (chromePins as React.CSSProperties) : undefined}
     >
       <div data-up-studio-bar>
-        <button type="button" data-up-btn onClick={() => { closeStudio() }}>‹ 返回</button>
-        <div data-up-studio-title>外观预设工作室</div>
-        <span data-up-status style={{ marginRight: 'auto' }}>{activeName !== null ? `活动：${activeName}` : '无活动预设'}</span>
+        <button type="button" data-up-btn onClick={() => { closeStudio() }}>{t('studio.back')}</button>
+        <div data-up-studio-title>{t('studio.title')}</div>
+        <span data-up-status style={{ marginRight: 'auto' }}>{activeName !== null ? t('studio.active', { name: activeName }) : t('studio.noActive')}</span>
         {/* #93：只保留 ZIP 导出（用户拍板：其他格式不要了） */}
-        <button type="button" data-up-btn onClick={() => { void exportZipCurrent() }}>导出 ZIP</button>
-        <button type="button" data-up-btn onClick={discard} disabled={session === null || busy}>放弃</button>
-        <button type="button" data-up-btn data-up-btn-primary onClick={() => { void save() }} disabled={session === null || busy}>保存</button>
+        <button type="button" data-up-btn onClick={() => { void exportZipCurrent() }}>{t('studio.exportZip')}</button>
+        <button type="button" data-up-btn onClick={discard} disabled={session === null || busy}>{t('studio.discard')}</button>
+        <button type="button" data-up-btn data-up-btn-primary onClick={() => { void save() }} disabled={session === null || busy}>{t('studio.save')}</button>
       </div>
       <div data-up-studio-body style={{ display: 'flex', gap: 16, padding: 16, flex: 1, overflow: 'hidden' }}>
         {/* 左栏：预设列表（M4-3 窄屏响应式规则见共享 CSS：<900px 纵向堆叠） */}
         <aside style={{ width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'auto' }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <button type="button" data-up-btn onClick={startNew} disabled={busy}>新建</button>
-            <button type="button" data-up-btn onClick={captureActive} disabled={busy}>从当前外观新建</button>
-            <button type="button" data-up-btn onClick={() => { fileInputRef.current?.click() }} disabled={busy}>导入</button>
+            <button type="button" data-up-btn onClick={startNew} disabled={busy}>{t('studio.new')}</button>
+            <button type="button" data-up-btn onClick={captureActive} disabled={busy}>{t('studio.capture')}</button>
+            <button type="button" data-up-btn onClick={() => { fileInputRef.current?.click() }} disabled={busy}>{t('studio.import')}</button>
             <input
               ref={fileInputRef}
               type="file"
@@ -517,20 +519,20 @@ export function StudioShell(): React.ReactElement | null {
             {presets.map(item => (
               <div key={item.id} data-up-card style={{ padding: 10, gap: 4 }}>
                 <div data-up-card-title style={{ fontSize: 13 }}>{item.name}</div>
-                <div data-up-card-desc>{item.id}{item.builtin ? ' · 内置' : ''}</div>
+                <div data-up-card-desc>{item.id}{item.builtin ? t('studio.builtinTag') : ''}</div>
                 <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  <button type="button" data-up-btn style={{ padding: '3px 10px', fontSize: 12 }} onClick={() => { void applyPreset(item.id) }} disabled={busy}>应用</button>
-                  <button type="button" data-up-btn style={{ padding: '3px 10px', fontSize: 12 }} onClick={() => { void openEditor(item.id) }} disabled={busy}>编辑</button>
-                  <button type="button" data-up-btn style={{ padding: '3px 10px', fontSize: 12 }} onClick={() => { void duplicate(item.id) }} disabled={busy || item.builtin}>复制</button>
-                  <button type="button" data-up-btn style={{ padding: '3px 10px', fontSize: 12 }} onClick={() => { void remove(item.id) }} disabled={busy || item.builtin}>删除</button>
+                  <button type="button" data-up-btn style={{ padding: '3px 10px', fontSize: 12 }} onClick={() => { void applyPreset(item.id) }} disabled={busy}>{t('studio.apply')}</button>
+                  <button type="button" data-up-btn style={{ padding: '3px 10px', fontSize: 12 }} onClick={() => { void openEditor(item.id) }} disabled={busy}>{t('studio.edit')}</button>
+                  <button type="button" data-up-btn style={{ padding: '3px 10px', fontSize: 12 }} onClick={() => { void duplicate(item.id) }} disabled={busy || item.builtin}>{t('studio.duplicate')}</button>
+                  <button type="button" data-up-btn style={{ padding: '3px 10px', fontSize: 12 }} onClick={() => { void remove(item.id) }} disabled={busy || item.builtin}>{t('studio.delete')}</button>
                   {/* #62 备份还原入口：仅存在 backup.json 时显示（交换式还原，不自动应用） */}
                   {item.hasBackup && (
-                    <button type="button" data-up-btn data-up-restore-btn style={{ padding: '3px 10px', fontSize: 12 }} onClick={() => { restoreBackup(item.id) }} disabled={busy}>还原备份</button>
+                    <button type="button" data-up-btn data-up-restore-btn style={{ padding: '3px 10px', fontSize: 12 }} onClick={() => { restoreBackup(item.id) }} disabled={busy}>{t('studio.restoreBackup')}</button>
                   )}
                 </div>
               </div>
             ))}
-            {presetsLoaded && presets.length === 0 && <div data-up-status>预设库为空——新建或导入一个预设开始。</div>}
+            {presetsLoaded && presets.length === 0 && <div data-up-status>{t('studio.empty')}</div>}
           </div>
         </aside>
         {/* 中栏：编辑器（修复轮 #30：整体可滚——overflow auto + minHeight 0，
@@ -547,7 +549,7 @@ export function StudioShell(): React.ReactElement | null {
           )}
           {hasCapability('knobs') && session === null && (
             <div data-up-wall style={{ justifyContent: 'center', height: '100%' }}>
-              <div data-up-status>从左侧选择一个预设「编辑」，或「新建」开始创作。</div>
+              <div data-up-status>{t('studio.pickOne')}</div>
             </div>
           )}
         </main>
@@ -555,22 +557,22 @@ export function StudioShell(): React.ReactElement | null {
       {/* 状态条（评审 P0-1：常驻，永不消失） */}
       <div data-up-studio-status style={{ padding: '8px 16px', borderTop: '1px solid var(--dsw-alias-border-l2)', fontSize: 12, color: 'var(--dsw-alias-label-tertiary, #999)', display: 'flex', gap: 12, alignItems: 'center' }}>
         {state?.hasDraft === true
-          ? <span style={{ color: 'var(--dsw-alias-state-warn-primary, #b7791f)' }}>● 预览中（未保存）</span>
-          : <span>已保存</span>}
+          ? <span style={{ color: 'var(--dsw-alias-state-warn-primary, #b7791f)' }}>{t('studio.draft')}</span>
+          : <span>{t('studio.saved')}</span>}
         {/* M2-4：活动预设携带主题 → 已注册 + 选择入口 */}
         {activeThemeId !== null && (
           <span data-up-theme-row style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            主题「{activeThemeId}」已注册
+            {t('studio.themeRegistered', { id: activeThemeId })}
             <button
               type="button"
               data-up-btn
               style={{ padding: '2px 10px', fontSize: 11 }}
               onClick={() => {
                 const result = controller?.selectTheme(activeThemeId)
-                if (result?.ok === true) setNotice(`已切换到主题「${activeThemeId}」`)
+                if (result?.ok === true) setNotice(t('studio.themeSwitched', { id: activeThemeId }))
               }}
             >
-              切换到此主题
+              {t('studio.switchTheme')}
             </button>
           </span>
         )}

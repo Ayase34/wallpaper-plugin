@@ -13,6 +13,8 @@ import { createLayer, composeMode, type LayerSpec } from '../core/layer-compose.
 import { decodeGif, encodeGif } from '../core/gif-codec.ts'
 import { getController } from './controller.ts'
 import type { WidgetAssetRef } from '../core/widgets.ts'
+import { useI18n } from './use-i18n.ts'
+import { t as tr } from './i18n.ts'
 // #89 素材面板缩略图：首帧 canvas 绘制，不再全量解码动图（内存累积根因）
 import { AssetThumb } from './asset-thumb.tsx'
 
@@ -23,13 +25,14 @@ export interface LayerComposerProps {
   onComposed: (asset: { id: string; name: string; mime: string }) => void
 }
 
-const RATIO_OPTIONS: Array<{ key: string; label: string }> = [
-  { key: 'chat-background', label: '16:9（聊天背景）' },
-  { key: 'settings-background', label: '1:1（设置卡）' },
-  { key: 'sidebar-poster', label: '1:5（侧栏海报）' },
+const RATIO_OPTIONS: Array<{ key: string; labelKey: 'lc.chat' | 'lc.settings' | 'lc.sidebar' }> = [
+  { key: 'chat-background', labelKey: 'lc.chat' },
+  { key: 'settings-background', labelKey: 'lc.settings' },
+  { key: 'sidebar-poster', labelKey: 'lc.sidebar' },
 ]
 
 export function LayerComposerDialog(props: LayerComposerProps): React.ReactElement {
+  const { t } = useI18n()
   const controller = getController()
   const [ratioKey, setRatioKey] = React.useState('chat-background')
   const [layers, setLayers] = React.useState<LayerSpec[]>([])
@@ -218,23 +221,23 @@ export function LayerComposerDialog(props: LayerComposerProps): React.ReactEleme
     }
     const mime = hasAlpha ? 'image/png' : 'image/jpeg'
     const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(b => resolve(b), mime, 0.85))
-    if (blob === null) throw new Error('底图编码失败')
+    if (blob === null) throw new Error(tr('lc.baseEncodeFailed'))
     const file = new File([blob], `合成壁纸-${Date.now()}.${mime === 'image/png' ? 'png' : 'jpg'}`, { type: mime })
     const result = await controller?.uploadAsset(file, undefined, {
       animAssetId: anim.assetId, x: anim.x, y: anim.y, w: anim.w, h: anim.h,
     })
     if (result?.ok === true && result.id !== undefined) {
-      setStatus(`已生成分层合成壁纸「${result.name ?? '合成壁纸'}」（静态底 + 原生动图）`)
+      setStatus(tr('lc.generatedLayered', { name: result.name ?? tr('lc.defaultName') }))
       props.onComposed({ id: result.id, name: result.name ?? '合成壁纸.png', mime })
     } else {
-      setStatus(result?.error ?? '合成上传失败')
+      setStatus(result?.error ?? tr('lc.uploadFailed'))
     }
   }
 
   /** 合成并上传：自动选模式——分层（底图+原生动图）/ 静态单图 / 烘焙动画。
    * forceBake=true（「烘焙为单文件动画」按钮）强制走时间轴烘焙。 */
   const compose = (forceBake: boolean): void => {
-    if (layers.length === 0) { setStatus('请先添加至少一个图层'); return }
+    if (layers.length === 0) { setStatus(tr('lc.needLayer')); return }
     setComposing(true)
     const mode = composeMode(layers, id => (props.assets.find(a => a.id === id)?.mime ?? '') === 'image/gif')
     void (async () => {
@@ -272,10 +275,10 @@ export function LayerComposerDialog(props: LayerComposerProps): React.ReactEleme
           const file = new File([bytes], `合成壁纸-${Date.now()}.png`, { type: 'image/png' })
           const result = await controller?.uploadAsset(file)
           if (result?.ok === true && result.id !== undefined) {
-            setStatus(`已生成合成壁纸「${result.name ?? '合成壁纸'}」`)
+            setStatus(tr('lc.generated', { name: result.name ?? tr('lc.defaultName') }))
             props.onComposed({ id: result.id, name: result.name ?? '合成壁纸.png', mime: 'image/png' })
           } else {
-            setStatus(result?.error ?? '合成上传失败')
+            setStatus(result?.error ?? tr('lc.uploadFailed'))
           }
           return
         }
@@ -283,7 +286,7 @@ export function LayerComposerDialog(props: LayerComposerProps): React.ReactEleme
         const gifCache = new Map<string, { width: number; height: number; frames: Array<{ pixels: Uint8ClampedArray; delayCs: number }> }>()
         for (const id of gifLayerIds) {
           const res = await fetch(`/ui-presets/assets/${encodeURIComponent(id)}`)
-          if (!res.ok) throw new Error('GIF 素材读取失败')
+          if (!res.ok) throw new Error(tr('lc.gifReadFailed'))
           gifCache.set(id, decodeGif(new Uint8Array(await res.arrayBuffer())))
         }
         const staticImages = await Promise.all(layers.map(layer => loadImage(layer.assetId)))
@@ -363,7 +366,7 @@ export function LayerComposerDialog(props: LayerComposerProps): React.ReactEleme
         for (const t of rawTimes) {
           if (t - last >= MIN_SEGMENT_CS) { times.push(t); last = t }
         }
-        if (times.length > 150) throw new Error('动图帧数过多（>150）——请使用帧率较低或时长较短的动图')
+        if (times.length > 150) throw new Error(tr('lc.tooManyFrames'))
         // #87 输出降采样：长边 >1280 时缩到 1280（纯 JS 编码全分辨率 1920×1080 帧太重；
         // 合成画布仍按帧尺寸渲染保证几何正确，仅编码尺寸缩小——壁纸按 cover 缩放显示）
         // #89 体积护栏：照片类静态图铺满画布时 GIF 可达 10MB+（用户担心"超大的 gif"实证）——
@@ -371,8 +374,8 @@ export function LayerComposerDialog(props: LayerComposerProps): React.ReactEleme
         const baseScale = Math.min(1, 1280 / Math.max(frame.w, frame.h))
         const minScale = Math.min(baseScale, 640 / Math.max(frame.w, frame.h))
         const MAX_OUTPUT_GIF_BYTES = 8 * 1024 * 1024
-        if (times.length === 0) throw new Error('时间轴为空')
-        setStatus(`合成中（动画 ${times.length} 帧）…`)
+        if (times.length === 0) throw new Error(tr('lc.emptyTimeline'))
+        setStatus(tr('lc.composing', { frames: times.length }))
         const renderFrames = (scale: number): Array<{ pixels: Uint8ClampedArray; delayCs: number }> => {
           const oc = document.createElement('canvas')
           oc.width = Math.max(1, Math.round(frame.w * scale))
@@ -403,19 +406,19 @@ export function LayerComposerDialog(props: LayerComposerProps): React.ReactEleme
           if (gifBytes.length <= MAX_OUTPUT_GIF_BYTES || scale <= minScale + 1e-6) break
           scale = Math.max(minScale, scale * 0.75)
         }
-        if (gifBytes === null) throw new Error('编码失败')
+        if (gifBytes === null) throw new Error(tr('lc.encodeFailed'))
         const sizeMb = (gifBytes.length / 1048576).toFixed(1)
-        const downscaled = scale < baseScale - 1e-6 ? ` · 已自动降采样至 ${finalW}×${finalH} 控制体积` : ''
+        const downscaled = scale < baseScale - 1e-6 ? tr('lc.downscaled', { w: finalW, h: finalH }) : ''
         const file = new File([gifBytes], `合成壁纸-${Date.now()}.gif`, { type: 'image/gif' })
         const result = await controller?.uploadAsset(file)
         if (result?.ok === true && result.id !== undefined) {
-          setStatus(`已生成合成壁纸「${result.name ?? '合成壁纸'}」（动画 ${times.length} 帧 · ${sizeMb}MB${downscaled}）`)
+          setStatus(tr('lc.generatedAnim', { name: result.name ?? tr('lc.defaultName'), frames: times.length, size: sizeMb, extra: downscaled }))
           props.onComposed({ id: result.id, name: result.name ?? '合成壁纸.gif', mime: 'image/gif' })
         } else {
-          setStatus(result?.error ?? '合成上传失败')
+          setStatus(result?.error ?? tr('lc.uploadFailed'))
         }
       } catch (error) {
-        setStatus(`合成失败：${error instanceof Error ? error.message : String(error)}`)
+        setStatus(tr('lc.failed', { error: error instanceof Error ? error.message : String(error) }))
       } finally {
         setComposing(false)
       }
@@ -440,18 +443,18 @@ export function LayerComposerDialog(props: LayerComposerProps): React.ReactEleme
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 14, fontWeight: 600 }}>图层合成壁纸</span>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>{t('lc.title')}</span>
           <select
-            aria-label="合成比例"
+            aria-label={t('lc.ratioAria')}
             value={ratioKey}
             onChange={e => { setRatioKey(e.target.value); setLayers([]); setSelected(-1); setUndoStack([]) }}
             style={{ fontSize: 12, padding: '2px 6px' }}
           >
-            {RATIO_OPTIONS.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
+            {RATIO_OPTIONS.map(opt => <option key={opt.key} value={opt.key}>{t(opt.labelKey)}</option>)}
           </select>
-          <span data-up-status style={{ fontSize: 11 }}>{status !== '' ? status : `画布 ${frame.w}×${frame.h} · 图层 ${layers.length}`}</span>
-          <button type="button" data-up-btn onClick={undo} disabled={undoStack.length === 0} style={{ marginLeft: 'auto' }}>撤销</button>
-          <button type="button" data-up-btn onClick={props.onClose}>关闭</button>
+          <span data-up-status style={{ fontSize: 11 }}>{status !== '' ? status : t('lc.canvas', { w: frame.w, h: frame.h, count: layers.length })}</span>
+          <button type="button" data-up-btn onClick={undo} disabled={undoStack.length === 0} style={{ marginLeft: 'auto' }}>{t('lc.undo')}</button>
+          <button type="button" data-up-btn onClick={props.onClose}>{t('lc.close')}</button>
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
           <canvas
@@ -459,7 +462,7 @@ export function LayerComposerDialog(props: LayerComposerProps): React.ReactEleme
             data-up-layer-canvas
             width={viewW}
             height={viewH}
-            aria-label="图层合成画布"
+            aria-label={tr('lc.canvasAria')}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -467,7 +470,7 @@ export function LayerComposerDialog(props: LayerComposerProps): React.ReactEleme
             style={{ width: viewW, height: viewH, border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 8, touchAction: 'none', cursor: 'grab', flex: 'none' }}
           />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 200 }}>
-            <span style={{ fontSize: 11, fontWeight: 600 }}>素材（点击加入画布）</span>
+            <span style={{ fontSize: 11, fontWeight: 600 }}>{tr('lc.assetsHint')}</span>
             <div data-up-layer-palette style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 150, overflow: 'auto' }}>
               {props.assets.map(asset => (
                 <AssetThumb
@@ -480,24 +483,24 @@ export function LayerComposerDialog(props: LayerComposerProps): React.ReactEleme
                 />
               ))}
             </div>
-            {props.assets.length === 0 && <span data-up-status style={{ fontSize: 10 }}>库中暂无素材——先在素材与部件区上传小块图片</span>}
+            {props.assets.length === 0 && <span data-up-status style={{ fontSize: 10 }}>{tr('lc.noAssets')}</span>}
             {selected >= 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--dsw-alias-border-l2)', paddingTop: 6 }}>
                 <label style={{ fontSize: 11 }}>
-                  旋转 {Math.round(layers[selected].rotation * 180 / Math.PI)}°
+                  {t('lc.rotate', { deg: Math.round(layers[selected].rotation * 180 / Math.PI) })}
                   <input
                     type="range" min={-180} max={180} step={1}
-                    aria-label="图层旋转"
+                    aria-label={t('lc.rotateAria')}
                     value={Math.round(layers[selected].rotation * 180 / Math.PI)}
                     onChange={e => updateLayers(layers.map((l, i) => i === selected ? { ...l, rotation: Number(e.target.value) * Math.PI / 180 } : l))}
                     style={{ width: '100%', display: 'block' }}
                   />
                 </label>
                 <label style={{ fontSize: 11 }}>
-                  不透明度 {Math.round(layers[selected].opacity * 100)}%
+                  {t('lc.opacity', { pct: Math.round(layers[selected].opacity * 100) })}
                   <input
                     type="range" min={0} max={100} step={1}
-                    aria-label="图层不透明度"
+                    aria-label={t('lc.opacityAria')}
                     value={Math.round(layers[selected].opacity * 100)}
                     onChange={e => updateLayers(layers.map((l, i) => i === selected ? { ...l, opacity: Number(e.target.value) / 100 } : l))}
                     style={{ width: '100%', display: 'block' }}
@@ -506,69 +509,69 @@ export function LayerComposerDialog(props: LayerComposerProps): React.ReactEleme
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {/* #87b：上移 = 朝 z 顶层（数组序 = z 序，靠后在上）——用户实测反馈
                       原实现方向反了（上移变沉底），已对调 */}
-                  <button type="button" data-up-btn aria-label="图层上移" onClick={() => {
+                  <button type="button" data-up-btn aria-label={t('lc.upAria')} onClick={() => {
                     if (selected < 0 || selected >= layers.length - 1) return
                     const next = [...layers]
                     const [item] = next.splice(selected, 1)
                     next.splice(selected + 1, 0, item)
                     updateLayers(next)
                     setSelected(selected + 1)
-                  }} style={{ padding: '2px 8px', fontSize: 11 }}>上移</button>
-                  <button type="button" data-up-btn aria-label="图层下移" onClick={() => {
+                  }} style={{ padding: '2px 8px', fontSize: 11 }}>{t('lc.up')}</button>
+                  <button type="button" data-up-btn aria-label={t('lc.downAria')} onClick={() => {
                     if (selected <= 0) return
                     const next = [...layers]
                     const [item] = next.splice(selected, 1)
                     next.splice(selected - 1, 0, item)
                     updateLayers(next)
                     setSelected(selected - 1)
-                  }} style={{ padding: '2px 8px', fontSize: 11 }}>下移</button>
-                  <button type="button" data-up-btn aria-label="图层置顶" onClick={() => {
+                  }} style={{ padding: '2px 8px', fontSize: 11 }}>{t('lc.down')}</button>
+                  <button type="button" data-up-btn aria-label={t('lc.topAria')} onClick={() => {
                     if (selected < 0) return
                     const next = [...layers]
                     const [item] = next.splice(selected, 1)
                     next.push(item)
                     updateLayers(next)
                     setSelected(next.length - 1)
-                  }} style={{ padding: '2px 8px', fontSize: 11 }}>置顶</button>
-                  <button type="button" data-up-btn aria-label="图层置底" onClick={() => {
+                  }} style={{ padding: '2px 8px', fontSize: 11 }}>{t('lc.top')}</button>
+                  <button type="button" data-up-btn aria-label={t('lc.bottomAria')} onClick={() => {
                     if (selected < 0) return
                     const next = [...layers]
                     const [item] = next.splice(selected, 1)
                     next.unshift(item)
                     updateLayers(next)
                     setSelected(0)
-                  }} style={{ padding: '2px 8px', fontSize: 11 }}>置底</button>
+                  }} style={{ padding: '2px 8px', fontSize: 11 }}>{t('lc.bottom')}</button>
                   <button
                     type="button"
                     data-up-btn
-                    aria-label="水平镜像"
+                    aria-label={t('lc.mirrorHAria')}
                     onClick={() => updateLayers(layers.map((l, i) => i === selected ? { ...l, flipH: !l.flipH } : l))}
                     style={{ padding: '2px 8px', fontSize: 11, ...(selected >= 0 && layers[selected]?.flipH ? { background: 'var(--dsw-alias-button-info-fill)', color: '#fff', borderColor: 'transparent' } : {}) }}
-                  >水平镜像</button>
+                  >{t('lc.mirrorH')}</button>
                   <button
                     type="button"
                     data-up-btn
-                    aria-label="垂直镜像"
+                    aria-label={t('lc.mirrorVAria')}
                     onClick={() => updateLayers(layers.map((l, i) => i === selected ? { ...l, flipV: !l.flipV } : l))}
                     style={{ padding: '2px 8px', fontSize: 11, ...(selected >= 0 && layers[selected]?.flipV ? { background: 'var(--dsw-alias-button-info-fill)', color: '#fff', borderColor: 'transparent' } : {}) }}
-                  >垂直镜像</button>
-                  <button type="button" data-up-btn aria-label="删除图层" onClick={() => {
+                  >{t('lc.mirrorV')}</button>
+                  <button type="button" data-up-btn aria-label={t('lc.deleteAria')} onClick={() => {
                     if (selected < 0) return
                     updateLayers(layers.filter((_, i) => i !== selected))
                     setSelected(-1)
-                  }} style={{ padding: '2px 8px', fontSize: 11 }}>删除</button>
+                  }} style={{ padding: '2px 8px', fontSize: 11 }}>{t('lc.delete')}</button>
                 </div>
               </div>
             )}
           </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, alignItems: 'center' }}>
-          <span data-up-status style={{ fontSize: 10 }}>透明底——渲染时按部件不透明度向底色淡出</span>
+          <span data-up-status style={{ fontSize: 10 }}>{tr('lc.transparentHint')}</span>
           {/* #90：模式可分层时提供「烘焙为单文件动画」兜底（多 GIF 同步/旋转/导出单文件场景） */}
           {composeMode(layers, id => (props.assets.find(a => a.id === id)?.mime ?? '') === 'image/gif').kind === 'layered' && !composing && (
             <button type="button" data-up-btn data-up-layer-bake onClick={() => { void compose(true) }}
-              style={{ padding: '4px 10px', fontSize: 11 }} title="把全部图层（含照片）烤进 GIF 每帧——体积大，仅多动图同步/旋转/单文件导出需要">
-              烘焙为单文件动画
+              style={{ padding: '4px 10px', fontSize: 11 }} title={tr('lc.bakeTitle')}>
+              {tr('lc.bake')}
             </button>
           )}
           <button
@@ -579,7 +582,7 @@ export function LayerComposerDialog(props: LayerComposerProps): React.ReactEleme
             onClick={() => { void compose(false) }}
             disabled={composing || layers.length === 0}
           >
-            {composing ? '合成中…' : '合成并上传'}
+            {composing ? tr('lc.composingShort') : tr('lc.compose')}
           </button>
         </div>
       </div>

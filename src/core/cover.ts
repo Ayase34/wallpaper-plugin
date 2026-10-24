@@ -11,6 +11,31 @@ import type { Preset } from './schema.ts'
 /** 封面固定比例（宽:高 = 3:1，#56 用户拍板——匹配设置墙卡片实际显示比例）。 */
 export const COVER_RATIO = { w: 3, h: 1 }
 
+/** 封面裁剪帧（与 `cropDrawRect` 的 frame 语义一致：3:1 长边 1920）。 */
+export const COVER_FRAME = { w: 1920, h: 640 }
+
+/**
+ * 封面裁剪参数 → canvas 目标矩形（#113 修复）。
+ *
+ * crop 的语义与部件裁剪**一致**：它是「图片在帧坐标系里的摆放矩形」（`cropDrawRect` 的产物），
+ * 不是源图选区。所以它必须映射成 `drawImage` 的**目标**矩形，源图用整张——
+ * 旧实现把它当成源选区并乘了画布比例（900/1920），对非 1920 宽的图会放大 2–3 倍并裁掉主体。
+ *
+ * @param crop - 帧坐标摆放矩形（x/y 可为负，表示图片溢出帧边界）。
+ * @param canvas - 输出画布尺寸（封面 900×300）。
+ * @returns 目标矩形；参数非法返回 null（调用方回退到未裁剪图源）。
+ */
+export function coverDestRect(
+  crop: { x: number; y: number; w: number; h: number },
+  canvas: { w: number; h: number } = { w: 900, h: 300 },
+  frame: { w: number; h: number } = COVER_FRAME,
+): { x: number; y: number; w: number; h: number } | null {
+  if (!(crop.w > 0) || !(crop.h > 0) || !(canvas.w > 0) || !(canvas.h > 0) || !(frame.w > 0) || !(frame.h > 0)) return null
+  if (!Number.isFinite(crop.x) || !Number.isFinite(crop.y) || !Number.isFinite(crop.w) || !Number.isFinite(crop.h)) return null
+  const s = canvas.w / frame.w
+  return { x: crop.x * s, y: crop.y * s, w: crop.w * s, h: crop.h * s }
+}
+
 function tokenOf(preset: Preset, name: string, scheme: 'light' | 'dark'): string {
   const value = preset.tokens[name]
   if (value !== undefined) return value[scheme]

@@ -117,6 +117,32 @@ test('savePreset 无草稿（库副本保存）→ applyPreset 提升且持久�
   } finally { restore() }
 })
 
+test('savePreset preserveDraft：旁路写入（分享导入）不得劫持当前草稿', async () => {
+  const theme = createFakeTheme()
+  const { controller, restore } = makeController(theme, {
+    '*': async () => ({ status: 200, body: { ok: true } }),
+  })
+  try {
+    // 用户正在编辑一个草稿
+    controller.engine.startDraft({
+      schemaVersion: 1, id: 'draft-live', name: '我的草稿', edition: 'standard',
+      tokens: { '--dsw-alias-bg-base': { light: '#111111', dark: '#222222' } },
+    })
+    assert.equal(controller.engine.getState().draftPresetId, 'draft-live')
+
+    // 分享导入：只落库、不激活、不碰草稿
+    const ok = await controller.savePreset(demoPreset('preset-import'), { activate: false, preserveDraft: true })
+    assert.equal(ok, true)
+    assert.equal(controller.engine.getState().draftPresetId, 'draft-live', '草稿 id 不得被改写')
+    assert.equal(controller.engine.getState().activePresetId, null, '导入不应激活任何预设')
+
+    // 对照：不带 preserveDraft 时旧语义保留（草稿改挂到落盘 id 并被提升——新建/另存流程依赖它）
+    await controller.savePreset(demoPreset('preset-renamed'), { activate: false })
+    assert.equal(controller.engine.getState().activePresetId, 'preset-renamed')
+    assert.equal(controller.engine.getState().hasDraft, false)
+  } finally { restore() }
+})
+
 test('deletePreset：删除活动预设清理活动引用与草稿', async () => {
   const theme = createFakeTheme()
   const { controller, restore } = makeController(theme, {

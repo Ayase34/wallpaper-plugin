@@ -11,45 +11,14 @@ import { openStudio } from './env.ts'
 import { PresetsController, getController, setController } from './controller.ts'
 import { StudioShell } from './studio-shell.tsx'
 import { auditPresets } from '../core/audit.ts'
-import { coverDataUrlFor } from '../core/cover.ts'
 import type { Preset } from '../core/schema.ts'
-
-/** #56：预设封面图源——手设封面（含 3:1 裁剪 canvas 渲染，帧 1920×640 → 900×300）优先；
- * 无手设封面/加载失败 → 自动生成 SVG。浏览器环境专用（墙加载时调用）。 */
-function coverImageFor(preset: Preset): Promise<string> {
-  const cover = preset.cover
-  if (cover === undefined || cover.assetId === '') return Promise.resolve(coverDataUrlFor(preset))
-  const asset = (preset.assets ?? []).find(item => item.id === cover.assetId)
-  if (asset === undefined) return Promise.resolve(coverDataUrlFor(preset))
-  const src = asset.dataUrl ?? `/ui-presets/assets/${encodeURIComponent(asset.id)}`
-  const hasCrop = typeof cover.cropX === 'string' && cover.cropX !== ''
-    && typeof cover.cropW === 'string' && cover.cropW !== ''
-  if (!hasCrop) return Promise.resolve(src)
-  return new Promise(resolve => {
-    const img = new Image()
-    img.onload = () => {
-      try {
-        const W = 900
-        const H = 300
-        const s = W / 1920 // 裁剪帧 1920×640（3:1 长边 1920）→ 900×300
-        const canvas = document.createElement('canvas')
-        canvas.width = W
-        canvas.height = H
-        const ctx = canvas.getContext('2d')
-        if (ctx === null) { resolve(src); return }
-        ctx.clearRect(0, 0, W, H)
-        ctx.drawImage(
-          img,
-          Number(cover.cropX) * s, Number(cover.cropY) * s,
-          Number(cover.cropW) * s, Number(cover.cropH) * s,
-        )
-        resolve(canvas.toDataURL('image/png'))
-      } catch { resolve(src) }
-    }
-    img.onerror = () => { resolve(coverDataUrlFor(preset)) }
-    img.src = src
-  })
-}
+import { isFavorite, loadFavorites, pickRandomId, saveFavorites, toggleInList } from './favorites.ts'
+import { buildShareLink, capturePendingShare, clearPendingShare, decodeShare, encodeShare, getPendingShare, type PendingShare } from './share.ts'
+import { ShareExportDialog, ShareImportDialog } from './share-dialog.tsx'
+import { t as tr } from './i18n.ts'
+import { useI18n } from './use-i18n.ts'
+import { renderCoverFor } from './cover-render.ts'
+import { coverDataUrlFor } from '../core/cover.ts'
 
 // #95：插件改名 wallpaper-plugin（注册名与 node half 一致）。
 export const name = 'wallpaper-plugin'
@@ -139,6 +108,18 @@ export function apply(ctx: ClientCtx): void {
     // 即 standard，#96 起不再显式 setCapabilities——与默认值相等是 no-op 且误导）
     // M2-3：AI bridge——Node half preset_apply 的变更经 revision 轮询在浏览器即时生效。
     controller.startAiBridge()
+    // 壁纸 2.0：轮换调度（本地偏好，不进预设；页面隐藏时暂停、回前台补切）。
+    controller.startRotation()
+  }
+
+  // ---- 分享链接：页面渲染前捕获 #ui-presets-share=…，落成待导入横幅 ----
+  // 捕获即清 hash（避免刷新/重进反复弹同一个分享；载荷已存模块级单例）。
+  try {
+    if (capturePendingShare(window.location.hash) !== null) {
+      history.replaceState(null, '', window.location.pathname + window.location.search)
+    }
+  } catch (error) {
+    console.warn('[ui-presets] 分享链接解析失败：', error)
   }
 
   // ---- 共享样式注入（幂等守卫 + 随 fiber 回收） ----
@@ -160,7 +141,7 @@ export function apply(ctx: ClientCtx): void {
           name: 'settings.section',
           id: 'appearance-presets',
           order: 5,
-          label: () => '外观预设',
+          label: () => tr('section.title'),
           inject: () => ({}),
         }, SectionPage)
       } catch (error) {
@@ -201,12 +182,21 @@ interface WallItem { id: string; name: string; edition: string; builtin: boolean
 function SectionPage(): React.ReactElement {
   const controller = getController()
   const state = useControllerState()
+  const { t, locale, toggle: toggleLocale } = useI18n()
   const [auditWarnings, setAuditWarnings] = React.useState<string[]>([])
   // M3-2：合并列表（demo + 库 + 源）与逐项封面（库预设异步加载 tokens 生成）
   const [wallItems, setWallItems] = React.useState<WallItem[] | null>(null)
   const [covers, setCovers] = React.useState<Record<string, string>>({})
   const [importing, setImporting] = React.useState(false)
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
+  /** 分享待导入（启动时从链接捕获 / 面板粘贴导入）。 */
+  const [pending, setPending] = React.useState<PendingShare | null>(() => getPendingShare())
+  /** 收藏（localStorage 便捷层）+ 只看收藏筛选。 */
+  const [favorites, setFavorites] = React.useState<string[]>(() => loadFavorites())
+  const [onlyFavorite, setOnlyFavorite] = React.useState(false)
+  const [shareExport, setShareExport] = React.useState<{ name: string; link: string; code: string; chars: number; omitted: number; warn?: string } | null>(null)
+  const [shareImportOpen, setShareImportOpen] = React.useState(false)
+  const [notice, setNotice] = React.useState<string | null>(null)
 
   // 加载预设墙合并列表（demo 优先，库/源补位——controller 已按查序合并）
   const loadWall = React.useCallback(async (): Promise<void> => {
@@ -226,7 +216,7 @@ function SectionPage(): React.ReactElement {
       void controller?.loadPreset(item.id).then(preset => {
         if (preset === null) return
         // #56：手设封面（含裁剪渲染）优先，否则自动生成 SVG
-        void coverImageFor(preset).then(src => {
+        void renderCoverFor(preset).then(src => {
           setCovers(prev => ({ ...prev, [item.id]: src }))
         })
       })
@@ -271,20 +261,134 @@ function SectionPage(): React.ReactElement {
         await loadWall()
       } else {
         // review P2-5（全量评审）：导入失败静默无反馈——在状态行显示具体错误。
-        controller?.engine.reportError(result?.error ?? '导入失败')
+        controller?.engine.reportError(result?.error ?? t('wall.importFailed'))
       }
     } finally { setImporting(false) }
   }
 
+  /** 收藏/取消收藏（纯前端；写入失败也不影响本次会话）。 */
+  const toggleFavorite = (id: string): void => {
+    const next = toggleInList(favorites, id)
+    setFavorites(next)
+    saveFavorites(next)
+  }
+
+  /** 「换一个试试」：随机应用一个不同于当前的预设。 */
+  const surprise = (): void => {
+    const ids = (wallItems ?? []).map(item => item.id)
+    const pick = pickRandomId(ids, state?.activePresetId ?? null)
+    if (pick === null) {
+      setNotice(t('wall.noOther'))
+      return
+    }
+    setNotice(null)
+    void controller?.applyPresetById(pick)
+  }
+
+  /** 导出分享：链接（同机）+ 分享码（跨机器）；编码前自校验，失败走状态行报错。 */
+  const shareItem = async (id: string): Promise<void> => {
+    if (controller === null) return
+    const preset = await controller.loadPreset(id)
+    if (preset === null) {
+      controller.engine.reportError(t('wall.cannotRead', { id }))
+      return
+    }
+    const result = encodeShare(preset)
+    if (!result.ok) {
+      controller.engine.reportError(result.error)
+      return
+    }
+    setShareExport({
+      name: preset.name,
+      link: buildShareLink(window.location.href, result.code),
+      code: result.code,
+      chars: result.chars,
+      omitted: result.omitted,
+      warn: result.warn,
+    })
+  }
+
+  /** 导入分享预设：只入库不激活（打开链接不等于同意换肤）；同 id 依次加后缀防覆盖。 */
+  const importShared = async (preset: Preset, omitted: number): Promise<void> => {
+    if (controller === null) return
+    setImporting(true)
+    try {
+      const existing = new Set((await controller.listPresets()).map(item => item.id))
+      let target = preset
+      if (existing.has(target.id)) {
+        let n = 2
+        let id = `${preset.id}-${n}`
+        while (existing.has(id)) { n += 1; id = `${preset.id}-${n}` }
+        target = { ...preset, id, name: `${preset.name}（导入）` }
+      }
+      const ok = await controller.savePreset(target, { activate: false, preserveDraft: true })
+      if (!ok) return
+      await loadWall()
+      setNotice(t('wall.imported', { name: target.name }) + (omitted > 0 ? t('wall.importedAssets', { count: omitted }) : ''))
+    } finally {
+      setImporting(false)
+      clearPendingShare()
+      setPending(null)
+    }
+  }
+
   const libraryEmpty = wallItems !== null && !wallItems.some(item => !item.builtin)
+  const visibleItems = (wallItems ?? []).filter(item => !onlyFavorite || isFavorite(favorites, item.id))
 
   return (
     <div data-up-section>
-      {/* 用户拍板：工作室入口 + 还原默认置顶（原在墙底部，卡片多时需滚动才能找到） */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <button type="button" data-up-btn data-up-btn-primary onClick={() => { openStudio() }}>打开美化工作室 →</button>
-        <button type="button" data-up-btn onClick={() => { controller?.clearActive() }}>还原默认</button>
+      {/* 用户拍板：工作室入口 + 还原默认置顶（原在墙底部，卡片多时需滚动才能找到）；
+          新增：换一个试试 / 只看收藏 / 导入分享码（借 dream-skin 的低摩擦玩法）。 */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button type="button" data-up-btn data-up-btn-primary onClick={() => { openStudio() }}>{t('wall.openStudio')}</button>
+        <button type="button" data-up-btn onClick={() => { controller?.clearActive() }}>{t('wall.reset')}</button>
+        <button type="button" data-up-btn data-up-surprise onClick={surprise}>{t('wall.surprise')}</button>
+        <button
+          type="button"
+          data-up-btn
+          data-up-fav-filter
+          data-up-fav-active={onlyFavorite ? 'true' : undefined}
+          onClick={() => { setOnlyFavorite(prev => !prev) }}
+          style={onlyFavorite ? { borderColor: 'var(--dsw-alias-brand-primary)' } : undefined}
+        >
+          {onlyFavorite ? '★' : '☆'} {favorites.length > 0 ? t('wall.favOnlyCount', { count: favorites.length }) : t('wall.favOnly')}
+        </button>
+        <button type="button" data-up-btn onClick={() => { setShareImportOpen(true) }}>{t('wall.importShare')}</button>
+        {/* 语言切换（en 用户的第一入口；中文用户看到 EN 按钮） */}
+        <button type="button" data-up-btn data-up-locale aria-label={t('lang.switchLabel')} onClick={toggleLocale}>
+          {locale === 'zh' ? 'EN' : '中文'}
+        </button>
       </div>
+      {/* 分享待导入横幅：链接打开 / 粘贴导入后在此确认（只入库不自动应用） */}
+      {pending !== null && (
+        <div
+          data-up-share-banner
+          style={{
+            display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
+            padding: '8px 12px', borderRadius: 8, fontSize: 12, lineHeight: 1.5, marginBottom: 8,
+            border: `1px solid ${pending.ok ? 'var(--dsw-alias-brand-primary, #4a7dff)' : 'var(--dsw-alias-state-error-primary, #d94c4c)'}`,
+            background: 'var(--dsw-alias-bg-layer-1)',
+          }}
+        >
+          {pending.ok ? (
+            <>
+              <span>
+                {t('share.received', { name: pending.preset.name })}
+                {pending.omitted > 0 ? t('share.assetsOmitted', { count: pending.omitted }) : ''}
+              </span>
+              <button type="button" data-up-btn data-up-btn-primary onClick={() => { void importShared(pending.preset, pending.omitted) }} disabled={importing}>
+                {importing ? t('wall.importing') : t('share.importToLibrary')}
+              </button>
+              <button type="button" data-up-btn onClick={() => { clearPendingShare(); setPending(null) }}>{t('share.ignore')}</button>
+            </>
+          ) : (
+            <>
+              <span style={{ color: 'var(--dsw-alias-state-error-primary, #d94c4c)' }}>{t('share.invalid', { error: pending.error })}</span>
+              <button type="button" data-up-btn onClick={() => { clearPendingShare(); setPending(null) }}>{t('share.gotIt')}</button>
+            </>
+          )}
+        </div>
+      )}
       {/* M2-2b：diff 告警横幅（所有版本可见） */}
       {auditWarnings.length > 0 && (
         <div
@@ -295,14 +399,14 @@ function SectionPage(): React.ReactElement {
             color: 'var(--dsw-alias-state-warn-primary, #b7791f)', background: 'var(--dsw-alias-bg-layer-1)',
           }}
         >
-          ⚠ {auditWarnings.join('；')}
+          {t('wall.auditPrefix', { warnings: auditWarnings.join(locale === 'en' ? '; ' : '；') })}
         </div>
       )}
       {/* M3-2：卡片化预设墙（demo + 库 + 源合并；整卡点击 = 一键切换） */}
       {/* review P3：加载态提示（wallItems 初始 null——原实现先渲染空网格再闪入） */}
-      {wallItems === null && <div data-up-status>加载预设中…</div>}
+      {wallItems === null && <div data-up-status>{t('wall.loading')}</div>}
       <div data-up-wall>
-        {(wallItems ?? []).map(item => {
+        {visibleItems.map(item => {
           const active = state?.activePresetId === item.id
           return (
             <div
@@ -329,22 +433,44 @@ function SectionPage(): React.ReactElement {
                 style={{ width: '100%', aspectRatio: '3 / 1', objectFit: 'cover', borderRadius: 8, border: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-layer-1)' }}
               />
               <div data-up-card-title>{item.name}</div>
-              <div data-up-card-desc>{item.builtin ? '出厂预设' : '我的预设'}{item.id === 'default' ? '' : ` · ${item.id}`}</div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div data-up-card-desc>{item.builtin ? t('wall.builtin') : t('wall.mine')}{item.id === 'default' ? '' : ` · ${item.id}`}</div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   data-up-btn
                   data-up-btn-primary
                   onClick={e => { e.stopPropagation(); void controller?.applyPresetById(item.id) }}
                 >
-                  {active ? '已应用' : '应用'}
+                  {active ? t('wall.applied') : t('wall.apply')}
                 </button>
-                {active && <span data-up-status>✓ 当前应用</span>}
+                <button
+                  type="button"
+                  data-up-fav
+                  aria-label={`${isFavorite(favorites, item.id) ? t('wall.unfavorite') : t('wall.favorite')} ${item.name}`}
+                  aria-pressed={isFavorite(favorites, item.id)}
+                  onClick={e => { e.stopPropagation(); toggleFavorite(item.id) }}
+                  style={{ padding: '2px 8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--dsw-alias-border-l2, #ddd)', background: 'transparent', color: isFavorite(favorites, item.id) ? 'var(--dsw-alias-brand-primary, #4a7dff)' : 'var(--dsw-alias-label-secondary, #666)', cursor: 'pointer' }}
+                >
+                  {isFavorite(favorites, item.id) ? '★' : '☆'}
+                </button>
+                <button
+                  type="button"
+                  data-up-share
+                  onClick={e => { e.stopPropagation(); void shareItem(item.id) }}
+                  style={{ padding: '2px 8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--dsw-alias-border-l2, #ddd)', background: 'transparent', color: 'var(--dsw-alias-label-secondary, #666)', cursor: 'pointer' }}
+                >
+                  {t('wall.share')}
+                </button>
+                {active && <span data-up-status>{t('wall.current')}</span>}
               </div>
             </div>
           )
         })}
       </div>
+      {/* 只看收藏且无命中时的空态（与「库为空」区分开） */}
+      {onlyFavorite && visibleItems.length === 0 && (
+        <div data-up-status style={{ marginTop: 8 }}>{t('wall.favEmpty')}</div>
+      )}
       {/* M3-2：空态引导（库为空时；统一给创建/导入路径——M4 简化后仅标准版） */}
       {libraryEmpty && (
         <div
@@ -355,11 +481,11 @@ function SectionPage(): React.ReactElement {
             background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-secondary, #666)',
           }}
         >
-          <div style={{ fontWeight: 600, color: 'var(--dsw-alias-label-primary, #111)' }}>还没有自己的预设</div>
+          <div style={{ fontWeight: 600, color: 'var(--dsw-alias-label-primary, #111)' }}>{t('wall.emptyTitle')}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span>打开工作室创建，或导入预设文件（ZIP）：</span>
+            <span>{t('wall.emptyBody')}</span>
             <button type="button" data-up-btn onClick={() => fileInputRef.current?.click()} disabled={importing}>
-              {importing ? '导入中…' : '导入预设文件'}
+              {importing ? t('wall.importing') : t('wall.importFile')}
             </button>
             <input
               ref={fileInputRef}
@@ -372,12 +498,40 @@ function SectionPage(): React.ReactElement {
         </div>
       )}
       {/* 用户拍板：状态行仅在有错误时显示（原"出厂 7 预设…"宣传小字已删） */}
+      {notice !== null && (
+        <div data-up-status data-up-notice style={{ marginTop: 8 }}>{notice}</div>
+      )}
       {state?.lastError !== null && state?.lastError !== undefined && (
         <div data-up-status style={{ marginTop: 8 }}>
           <span data-up-error>{state.lastError}</span>
         </div>
       )}
       <StudioShell />
+      {shareExport !== null && (
+        <ShareExportDialog
+          presetName={shareExport.name}
+          link={shareExport.link}
+          code={shareExport.code}
+          chars={shareExport.chars}
+          omitted={shareExport.omitted}
+          warn={shareExport.warn}
+          onClose={() => { setShareExport(null) }}
+        />
+      )}
+      {shareImportOpen && (
+        <ShareImportDialog
+          onClose={() => { setShareImportOpen(false) }}
+          onImport={text => {
+            const decoded = decodeShare(text)
+            setShareImportOpen(false)
+            if (!decoded.ok) {
+              controller?.engine.reportError(decoded.error)
+              return
+            }
+            void importShared(decoded.preset, decoded.omitted)
+          }}
+        />
+      )}
     </div>
   )
 }

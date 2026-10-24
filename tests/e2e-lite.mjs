@@ -38,13 +38,19 @@ const studio = page.locator('[data-up-studio]')
 await studio.waitFor({ timeout: 10000 })
 await studio.locator('[data-up-card]').first().waitFor({ timeout: 10000 })
 
-// 0. 精简面：旋钮层/CSS/主题入口已注释（#74），原始令牌区在
-check('旋钮层入口已移除（无 [data-up-knob]）', await studio.locator('[data-up-knob]').count() === 0)
-check('CSS 编辑器入口已移除（无 [data-up-css-editor]）', await studio.locator('[data-up-css-editor]').count() === 0)
-
+// 0. 旋钮层 / CSS 补丁 / 主题注册均进编辑后渲染（旋钮层按决策 E 位于顶部）
 // 1. 编辑 默认（唯一出厂预设）→ 展开原始令牌区
 await studio.locator('[data-up-card]', { hasText: '默认' }).first().getByRole('button', { name: '编辑' }).click()
 await studio.getByLabel('预设名称').waitFor({ timeout: 10000 })
+// 0b. 旋钮层：6 类 26 旋钮（M2-1 恢复）
+check('旋钮层存在（至少 20 个旋钮）', await studio.locator('[data-up-knob]').count() >= 20)
+check('旋钮类别 6 类', await studio.locator('[data-up-knob-category]').count() === 6)
+// 0c. 高级区两块面板（进编辑后才渲染）：存在且默认折叠
+check('CSS 补丁面板存在', await studio.locator('[data-up-css-panel]').count() === 1)
+check('主题注册面板存在', await studio.locator('[data-up-theme-panel]').count() === 1)
+check('两块高级面板默认折叠（规则行/开关未渲染）',
+  await studio.locator('[data-up-css-row]').count() === 0
+  && await studio.locator('[data-up-theme-enable]').count() === 0)
 await studio.locator('[data-up-advanced-head]').click()
 await page.waitForTimeout(300)
 // 内置中文描述显示（bg-base 行有描述）

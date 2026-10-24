@@ -40,9 +40,9 @@ await studio.locator('[data-up-card]', { hasText: '默认' }).first().getByRole(
 await studio.getByLabel('预设名称').waitFor({ timeout: 10000 })
 await page.waitForTimeout(500)
 
-// #74：旋钮层对比度徽标随入口注释移除——验证无徽标 + 质量检查由 preset_check（AI 工具）承担
-check('旋钮层对比度徽标已移除（无 [data-up-contrast]）', (await studio.locator('[data-up-contrast]').count()) === 0)
-check('旋钮层已移除（无 [data-up-knob]）', (await studio.locator('[data-up-knob]').count()) === 0)
+// #74 的旋钮层对比度徽标仍未恢复（徽标属另一套能力）；但旋钮层本身已按 M2-1 恢复
+check('旋钮层对比度徽标仍无（无 [data-up-contrast]）', (await studio.locator('[data-up-contrast]').count()) === 0)
+check('旋钮层已恢复（[data-up-knob] 存在）', (await studio.locator('[data-up-knob]').count()) >= 20)
 
 // 原始令牌直编仍可用（对比度提示由 AI preset_check 侧负责——e2e-ai-tools/单测已覆盖）
 await studio.locator('[data-up-advanced-head]').click()

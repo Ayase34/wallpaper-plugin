@@ -90,7 +90,7 @@ test('inspectState：活动/档位/令牌清单', () => {
     const state = inspectState(env)
     assert.equal(state.activePresetId, 'default')
     assert.equal(state.activeName, '默认')
-    assert.equal(state.tokenCount, 15)
+    assert.equal(state.tokenCount, 36)
     assert.ok(state.appliedTokenNames.includes('--dsw-alias-bg-base'))
     assert.equal(state.tier, 'standard')
     assert.equal(state.revision, 1)
@@ -194,7 +194,7 @@ test('#64 getPresetDetail：库预设详情（tokens/css/edition/备份标记）
     // demo 可读
     const demo = getPresetDetail(env, 'default')
     assert.equal(demo.builtin, true)
-    assert.equal(demo.tokenCount, 15)
+    assert.equal(demo.tokenCount, 36)
     assert.equal(demo.hasBackup, false)
     // 未知 / 非法 id
     assert.throws(() => getPresetDetail(env, 'no-such'), /不存在/)
